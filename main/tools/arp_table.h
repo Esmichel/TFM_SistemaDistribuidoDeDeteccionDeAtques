@@ -7,9 +7,7 @@ extern "C"
 #endif
 
 #include <stdint.h>
-#include "lwip/ip_addr.h"
 
-    
     typedef struct
     {
         uint32_t ip;

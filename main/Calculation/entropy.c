@@ -1,7 +1,8 @@
-#include <math.h>
-#include <stdint.h>
-#include <string.h>
 #include "entropy.h"
+
+// loaded config values
+//int MAX_BINS = 0;
+//int max_variables = 0;
 
 static entropy_data_t entropy_variables[MAX_VARIABLES];
 static int num_entropy_vars = 0;

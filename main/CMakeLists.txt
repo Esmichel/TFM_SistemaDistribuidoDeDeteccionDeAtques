@@ -1,6 +1,6 @@
-idf_component_register(SRCS "wifi_station.c" "sniffer_module.c" "main_module.c" "wifi_station" "sniffer_module" "attack_detection/deauth_attack.c" "Calculation/entropy.c"
-                    "Calculation/estandard_deviation.c" "detection_methods/mac_analysis.c" "detection_methods/frequency_analysis.c" "attack_detection/mac_spoofing.c"
-                    "attack_detection/evil_twin.c" "attack_detection/arp_spoofing.c" "attack_detection/beacon_flood.c" "tools/hash_function.c" "tools/arp_table.c" "MQTT_Comunication/requester.c"
-                    "../components/cjson/cJSON.c" "../components/cjson/cJSON_Utils.c" "MQTT_Comunication/network_status.c" "tools/base64encoding.c" "tools/l3_processor.c" "tools/l7_processor.c" "tools/mac_address_module.c"
+idf_component_register(SRCS "wifi_station.c" "sniffer_module.c" "main_module.c" "wifi_station" "sniffer_module" "attack_detection/deauth_attack.c" "Calculation/entropy.c" "attack_detection/traffic_analyzer.c"
+                    "Calculation/estandard_deviation.c" "detection_methods/mac_analysis.c" "detection_methods/frequency_analysis.c" "attack_detection/mac_spoofing.c" "attack_detection/arp_spoofing.c"
+                    "attack_detection/evil_twin.c" "attack_detection/beacon_flood.c" "tools/centralized_config.c" "tools/hash_function.c" "tools/arp_table.c" "MQTT_Comunication/requester.c" "MQTT_Comunication/mqtt_fragment_buffer.c"
+                    "../components/cjson/cJSON.c" "../components/cjson/cJSON_Utils.c" "MQTT_Comunication/network_status.c" "tools/base64encoding.c" "tools/l7_processor.c" "tools/mac_address_module.c"
                     INCLUDE_DIRS "."
                     REQUIRES "freertos" "newlib" "esp_system" "esp_hw_support" "esp_rom" "log" "esp_netif" "esp_wifi" "esp_event" "nvs_flash" "esp_timer" "mqtt" "cjson" "esp_pm")

@@ -9,7 +9,7 @@
 #include "esp_system.h"
 #include "esp_mac.h"
 
-#define ETH_TYPE_IP 0x0800 
+// #define ETH_TYPE_IP 0x0800 
 static const char *TAG = "sniffer_l3";
 
 typedef struct {

@@ -129,8 +129,56 @@ CMAKE_EXPORT_COMPILE_COMMANDS:BOOL=
 //Value Computed by CMake.
 CMAKE_FIND_PACKAGE_REDIRECTS_DIR:STATIC=/home/sergio/Desktop/Repos/GithubRepos/TFM/TFM_SistemaDistribuidoDeDeteccionDeAtques/CMakeFiles/pkgRedirects
 
+//User executables (bin)
+CMAKE_INSTALL_BINDIR:PATH=bin
+
+//Read-only architecture-independent data (DATAROOTDIR)
+CMAKE_INSTALL_DATADIR:PATH=
+
+//Read-only architecture-independent data root (share)
+CMAKE_INSTALL_DATAROOTDIR:PATH=share
+
+//Documentation root (DATAROOTDIR/doc/PROJECT_NAME)
+CMAKE_INSTALL_DOCDIR:PATH=
+
+//C header files (include)
+CMAKE_INSTALL_INCLUDEDIR:PATH=include
+
+//Info documentation (DATAROOTDIR/info)
+CMAKE_INSTALL_INFODIR:PATH=
+
+//Object code libraries (lib)
+CMAKE_INSTALL_LIBDIR:PATH=lib
+
+//Program executables (libexec)
+CMAKE_INSTALL_LIBEXECDIR:PATH=libexec
+
+//Locale-dependent data (DATAROOTDIR/locale)
+CMAKE_INSTALL_LOCALEDIR:PATH=
+
+//Modifiable single-machine data (var)
+CMAKE_INSTALL_LOCALSTATEDIR:PATH=var
+
+//Man documentation (DATAROOTDIR/man)
+CMAKE_INSTALL_MANDIR:PATH=
+
+//C header files for non-gcc (/usr/include)
+CMAKE_INSTALL_OLDINCLUDEDIR:PATH=/usr/include
+
 //Install path prefix, prepended onto install directories.
 CMAKE_INSTALL_PREFIX:PATH=/usr/local
+
+//Run-time variable data (LOCALSTATEDIR/run)
+CMAKE_INSTALL_RUNSTATEDIR:PATH=
+
+//System admin executables (sbin)
+CMAKE_INSTALL_SBINDIR:PATH=sbin
+
+//Modifiable architecture-independent data (com)
+CMAKE_INSTALL_SHAREDSTATEDIR:PATH=com
+
+//Read-only single-machine data (etc)
+CMAKE_INSTALL_SYSCONFDIR:PATH=etc
 
 //Path to a program.
 CMAKE_LINKER:FILEPATH=/usr/bin/ld
@@ -175,6 +223,21 @@ CMAKE_PROJECT_HOMEPAGE_URL:STATIC=
 
 //Value Computed by CMake
 CMAKE_PROJECT_NAME:STATIC=TFM_SistemaDistribuidoDeDeteccionDeAtques
+
+//Value Computed by CMake
+CMAKE_PROJECT_VERSION:STATIC=3.6.2
+
+//Value Computed by CMake
+CMAKE_PROJECT_VERSION_MAJOR:STATIC=3
+
+//Value Computed by CMake
+CMAKE_PROJECT_VERSION_MINOR:STATIC=6
+
+//Value Computed by CMake
+CMAKE_PROJECT_VERSION_PATCH:STATIC=2
+
+//Value Computed by CMake
+CMAKE_PROJECT_VERSION_TWEAK:STATIC=
 
 //Path to a program.
 CMAKE_RANLIB:FILEPATH=/usr/bin/ranlib
@@ -241,8 +304,20 @@ CMAKE_TAPI:FILEPATH=CMAKE_TAPI-NOTFOUND
 // Studio IDE projects all commands are done without /nologo.
 CMAKE_VERBOSE_MAKEFILE:BOOL=FALSE
 
+//Disable package configuration, target export and installation
+DISABLE_PACKAGE_CONFIG_AND_INSTALL:BOOL=ON
+
+//Build Mbed TLS programs.
+ENABLE_PROGRAMS:BOOL=
+
+//Build Mbed TLS tests.
+ENABLE_TESTING:BOOL=
+
 //No help, variable specified on the command line.
 ESP_PLATFORM:UNINITIALIZED=1
+
+//Generate the auto-generated files as needed
+GEN_FILES:BOOL=
 
 //Git command line client
 GIT_EXECUTABLE:FILEPATH=/usr/bin/git
@@ -253,11 +328,41 @@ IDF_TARGET:STRING=esp32
 //IDF Build Toolchain Type
 IDF_TOOLCHAIN:STRING=gcc
 
+//Install Mbed TLS headers.
+INSTALL_MBEDTLS_HEADERS:BOOL=ON
+
+//Explicitly link Mbed TLS library to pthread.
+LINK_WITH_PTHREAD:BOOL=OFF
+
+//Explicitly link Mbed TLS library to trusted_storage.
+LINK_WITH_TRUSTED_STORAGE:BOOL=OFF
+
+//Mbed TLS config file (overrides default).
+MBEDTLS_CONFIG_FILE:FILEPATH=
+
+//Compiler warnings treated as errors
+MBEDTLS_FATAL_WARNINGS:BOOL=ON
+
+//Mbed TLS user config file (appended to default).
+MBEDTLS_USER_CONFIG_FILE:FILEPATH=
+
+//Value Computed by CMake
+Mbed TLS_BINARY_DIR:STATIC=/home/sergio/Desktop/Repos/GithubRepos/TFM/TFM_SistemaDistribuidoDeDeteccionDeAtques/esp-idf/mbedtls/mbedtls
+
+//Value Computed by CMake
+Mbed TLS_IS_TOP_LEVEL:STATIC=OFF
+
+//Value Computed by CMake
+Mbed TLS_SOURCE_DIR:STATIC=/home/sergio/esp/esp-idf/components/mbedtls/mbedtls
+
 //No help, variable specified on the command line.
-PYTHON:UNINITIALIZED=/home/sergio/.espressif/python_env/idf5.5_py3.12_env/bin/python
+PYTHON:UNINITIALIZED=/home/sergio/esp/esp-idf/tools/python_env/idf5.5_py3.12_env/bin/python
 
 //No help, variable specified on the command line.
 PYTHON_DEPS_CHECKED:UNINITIALIZED=1
+
+//No help, variable specified on the command line.
+SDKCONFIG:UNINITIALIZED=/home/sergio/Desktop/Repos/GithubRepos/TFM/TFM_SistemaDistribuidoDeDeteccionDeAtques/sdkconfig
 
 //Value Computed by CMake
 TFM_SistemaDistribuidoDeDeteccionDeAtques_BINARY_DIR:STATIC=/home/sergio/Desktop/Repos/GithubRepos/TFM/TFM_SistemaDistribuidoDeDeteccionDeAtques
@@ -267,6 +372,39 @@ TFM_SistemaDistribuidoDeDeteccionDeAtques_IS_TOP_LEVEL:STATIC=ON
 
 //Value Computed by CMake
 TFM_SistemaDistribuidoDeDeteccionDeAtques_SOURCE_DIR:STATIC=/home/sergio/Desktop/Repos/GithubRepos/TFM/TFM_SistemaDistribuidoDeDeteccionDeAtques
+
+//Allow unsafe builds. These builds ARE NOT SECURE.
+UNSAFE_BUILD:BOOL=OFF
+
+//Build Mbed TLS shared library.
+USE_SHARED_MBEDTLS_LIBRARY:BOOL=OFF
+
+//Build Mbed TLS static library.
+USE_STATIC_MBEDTLS_LIBRARY:BOOL=ON
+
+//Value Computed by CMake
+esp-idf_BINARY_DIR:STATIC=/home/sergio/Desktop/Repos/GithubRepos/TFM/TFM_SistemaDistribuidoDeDeteccionDeAtques/esp-idf
+
+//Value Computed by CMake
+esp-idf_IS_TOP_LEVEL:STATIC=OFF
+
+//Value Computed by CMake
+esp-idf_SOURCE_DIR:STATIC=/home/sergio/esp/esp-idf
+
+//Dependencies for the target
+everest_LIB_DEPENDS:STATIC=general;__idf_cxx;general;__idf_newlib;general;__idf_freertos;general;__idf_esp_hw_support;general;__idf_heap;general;__idf_log;general;__idf_soc;general;__idf_hal;general;__idf_esp_rom;general;__idf_esp_common;general;__idf_esp_system;general;__idf_riscv;
+
+//Dependencies for the target
+mbedcrypto_LIB_DEPENDS:STATIC=general;__idf_cxx;general;__idf_newlib;general;__idf_freertos;general;__idf_esp_hw_support;general;__idf_heap;general;__idf_log;general;__idf_soc;general;__idf_hal;general;__idf_esp_rom;general;__idf_esp_common;general;__idf_esp_system;general;__idf_riscv;general;everest;general;p256m;general;idf::esp_security;general;idf::esp_mm;
+
+//Dependencies for the target
+mbedtls_LIB_DEPENDS:STATIC=general;__idf_cxx;general;__idf_newlib;general;__idf_freertos;general;__idf_esp_hw_support;general;__idf_heap;general;__idf_log;general;__idf_soc;general;__idf_hal;general;__idf_esp_rom;general;__idf_esp_common;general;__idf_esp_system;general;__idf_riscv;general;mbedx509;
+
+//Dependencies for the target
+mbedx509_LIB_DEPENDS:STATIC=general;__idf_cxx;general;__idf_newlib;general;__idf_freertos;general;__idf_esp_hw_support;general;__idf_heap;general;__idf_log;general;__idf_soc;general;__idf_hal;general;__idf_esp_rom;general;__idf_esp_common;general;__idf_esp_system;general;__idf_riscv;general;mbedcrypto;
+
+//Dependencies for the target
+p256m_LIB_DEPENDS:STATIC=general;__idf_cxx;general;__idf_newlib;general;__idf_freertos;general;__idf_esp_hw_support;general;__idf_heap;general;__idf_log;general;__idf_soc;general;__idf_hal;general;__idf_esp_rom;general;__idf_esp_common;general;__idf_esp_system;general;__idf_riscv;
 
 
 ########################
@@ -366,11 +504,45 @@ CMAKE_GENERATOR_INSTANCE:INTERNAL=
 CMAKE_GENERATOR_PLATFORM:INTERNAL=
 //Name of generator toolset.
 CMAKE_GENERATOR_TOOLSET:INTERNAL=
+//Test CMAKE_HAVE_LIBC_PTHREAD
+CMAKE_HAVE_LIBC_PTHREAD:INTERNAL=1
 //Source directory with the top level CMakeLists.txt file for this
 // project
 CMAKE_HOME_DIRECTORY:INTERNAL=/home/sergio/Desktop/Repos/GithubRepos/TFM/TFM_SistemaDistribuidoDeDeteccionDeAtques
+//ADVANCED property for variable: CMAKE_INSTALL_BINDIR
+CMAKE_INSTALL_BINDIR-ADVANCED:INTERNAL=1
+//ADVANCED property for variable: CMAKE_INSTALL_DATADIR
+CMAKE_INSTALL_DATADIR-ADVANCED:INTERNAL=1
+//ADVANCED property for variable: CMAKE_INSTALL_DATAROOTDIR
+CMAKE_INSTALL_DATAROOTDIR-ADVANCED:INTERNAL=1
+//ADVANCED property for variable: CMAKE_INSTALL_DOCDIR
+CMAKE_INSTALL_DOCDIR-ADVANCED:INTERNAL=1
+//ADVANCED property for variable: CMAKE_INSTALL_INCLUDEDIR
+CMAKE_INSTALL_INCLUDEDIR-ADVANCED:INTERNAL=1
+//ADVANCED property for variable: CMAKE_INSTALL_INFODIR
+CMAKE_INSTALL_INFODIR-ADVANCED:INTERNAL=1
+//ADVANCED property for variable: CMAKE_INSTALL_LIBDIR
+CMAKE_INSTALL_LIBDIR-ADVANCED:INTERNAL=1
+//ADVANCED property for variable: CMAKE_INSTALL_LIBEXECDIR
+CMAKE_INSTALL_LIBEXECDIR-ADVANCED:INTERNAL=1
+//ADVANCED property for variable: CMAKE_INSTALL_LOCALEDIR
+CMAKE_INSTALL_LOCALEDIR-ADVANCED:INTERNAL=1
+//ADVANCED property for variable: CMAKE_INSTALL_LOCALSTATEDIR
+CMAKE_INSTALL_LOCALSTATEDIR-ADVANCED:INTERNAL=1
+//ADVANCED property for variable: CMAKE_INSTALL_MANDIR
+CMAKE_INSTALL_MANDIR-ADVANCED:INTERNAL=1
+//ADVANCED property for variable: CMAKE_INSTALL_OLDINCLUDEDIR
+CMAKE_INSTALL_OLDINCLUDEDIR-ADVANCED:INTERNAL=1
+//ADVANCED property for variable: CMAKE_INSTALL_RUNSTATEDIR
+CMAKE_INSTALL_RUNSTATEDIR-ADVANCED:INTERNAL=1
+//ADVANCED property for variable: CMAKE_INSTALL_SBINDIR
+CMAKE_INSTALL_SBINDIR-ADVANCED:INTERNAL=1
+//ADVANCED property for variable: CMAKE_INSTALL_SHAREDSTATEDIR
+CMAKE_INSTALL_SHAREDSTATEDIR-ADVANCED:INTERNAL=1
 //Install .so files without execute permission.
 CMAKE_INSTALL_SO_NO_EXE:INTERNAL=1
+//ADVANCED property for variable: CMAKE_INSTALL_SYSCONFDIR
+CMAKE_INSTALL_SYSCONFDIR-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: CMAKE_LINKER
 CMAKE_LINKER-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: CMAKE_MAKE_PROGRAM
@@ -433,10 +605,28 @@ CMAKE_TAPI-ADVANCED:INTERNAL=1
 CMAKE_UNAME:INTERNAL=/usr/bin/uname
 //ADVANCED property for variable: CMAKE_VERBOSE_MAKEFILE
 CMAKE_VERBOSE_MAKEFILE-ADVANCED:INTERNAL=1
+//Test C_COMPILER_SUPPORTS_WFORMAT_SIGNEDNESS
+C_COMPILER_SUPPORTS_WFORMAT_SIGNEDNESS:INTERNAL=1
 //Details about finding Git
 FIND_PACKAGE_MESSAGE_DETAILS_Git:INTERNAL=[/usr/bin/git][v2.43.0()]
+//Details about finding Python3
+FIND_PACKAGE_MESSAGE_DETAILS_Python3:INTERNAL=[/home/sergio/esp/esp-idf/tools/python_env/idf5.5_py3.12_env/bin/python][cfound components: Interpreter ][v3.12.3()]
+//Details about finding Threads
+FIND_PACKAGE_MESSAGE_DETAILS_Threads:INTERNAL=[TRUE][v()]
 //ADVANCED property for variable: GIT_EXECUTABLE
 GIT_EXECUTABLE-ADVANCED:INTERNAL=1
 //linker supports push/pop state
 _CMAKE_LINKER_PUSHPOP_STATE_SUPPORTED:INTERNAL=TRUE
+//CMAKE_INSTALL_PREFIX during last run
+_GNUInstallDirs_LAST_CMAKE_INSTALL_PREFIX:INTERNAL=/usr/local
+//Compiler reason failure
+_Python3_Compiler_REASON_FAILURE:INTERNAL=
+//Development reason failure
+_Python3_Development_REASON_FAILURE:INTERNAL=
+_Python3_EXECUTABLE:INTERNAL=/home/sergio/esp/esp-idf/tools/python_env/idf5.5_py3.12_env/bin/python
+//Python3 Properties
+_Python3_INTERPRETER_PROPERTIES:INTERNAL=Python;3;12;3;64;32;;cpython-312-x86_64-linux-gnu;abi3;/usr/lib/python3.12;/home/sergio/esp/esp-idf/tools/python_env/idf5.5_py3.12_env/lib/python3.12;/home/sergio/esp/esp-idf/tools/python_env/idf5.5_py3.12_env/lib/python3.12/site-packages;/home/sergio/esp/esp-idf/tools/python_env/idf5.5_py3.12_env/lib/python3.12/site-packages
+_Python3_INTERPRETER_SIGNATURE:INTERNAL=eeae2f1fb7def64fc12a6019f20f19cf
+//NumPy reason failure
+_Python3_NumPy_REASON_FAILURE:INTERNAL=
 

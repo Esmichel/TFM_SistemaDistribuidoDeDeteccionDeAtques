@@ -2,10 +2,11 @@
 #define FREQUENCY_ANALYSIS_H
 
 #include <stdint.h>
-#include <stdbool.h>
+#include "../tools/centralized_config.h"
 
-#define TIME_WINDOW  5000 
-#define ATTACK_TYPE_COUNT  5 
+// #define TIME_WINDOW  5000 
+// #define ATTACK_TYPE_COUNT  5 
+// #define MAX_TRACKED_SOURCES 50
 
 typedef enum {
     ATTACK_TYPE_DEAUTH,
@@ -28,7 +29,7 @@ typedef struct {
     uint32_t last_timestamp;
 } attack_frequency_t;
 
-#define MAX_TRACKED_SOURCES 50
+
 
 typedef struct {
     uint32_t source;
@@ -52,5 +53,6 @@ void init_frequency_tracker(frequency_tracker_t *tracker, uint32_t time_window, 
 void update_frequency(frequency_tracker_t *tracker, uint32_t *source, uint32_t timestamp);
 void clear_frequency_tracker(frequency_tracker_t *tracker);
 bool detect_high_frequency(frequency_tracker_t *tracker, uint32_t *source, uint32_t timestamp);
+void initialize_frequency_analysis();
 
 #endif

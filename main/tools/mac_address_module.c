@@ -1,13 +1,7 @@
-#include <stdio.h>
-#include <string.h>
-#include "esp_log.h"
-#include "esp_wifi.h"
-#include "esp_system.h"
-#include "esp_err.h"
 #include "mac_address_module.h"
 
 #define TAG "MAC_ADDR_MODULE"
-#define MAC_ADDRESS_LENGTH 6
+// #define MAC_ADDRESS_LENGTH 6
 
 esp_err_t set_wifi_mac_address(wifi_interface_t interface, uint8_t *mac)
 {

@@ -1,20 +1,30 @@
 #include "frequency_analysis.h"
+
 #include "esp_log.h"
-#include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
 #include <stdio.h>
 
 static const char *TAG = "frequency_analysis";
+// loaded config values
+int time_window_frequency = 0;
+
+void initialize_frequency_analysis()
+{
+    AppConfig *config = get_config();
+    time_window_frequency = config->time_window_frequency;
+}
 
 void init_frequency_analysis(attack_frequency_t *frequency_data)
 {
+    AppConfig *config = get_config();
+    time_window_frequency = config->time_window_frequency;
     memset(frequency_data, 0, sizeof(attack_frequency_t));
 }
 
 void update_attack_count(attack_frequency_t *frequency_data, uint32_t timestamp, attack_type_t attack_type)
 {
-    if (timestamp / TIME_WINDOW > frequency_data->last_timestamp / TIME_WINDOW)
+    if (timestamp / time_window_frequency > frequency_data->last_timestamp / time_window_frequency)
     {
         ESP_LOGI(TAG, "Resetting attack counts (New Time Window) - Previous: %d, Current: %d",
                  frequency_data->last_timestamp, timestamp);
@@ -39,10 +49,10 @@ void clear_frequency_data(attack_frequency_t *frequency_data)
     memset(frequency_data, 0, sizeof(attack_frequency_t));
 }
 
-void init_frequency_tracker(frequency_tracker_t *tracker, uint32_t time_window, uint32_t attack_threshold)
+void init_frequency_tracker(frequency_tracker_t *tracker, uint32_t time_window_frequency, uint32_t attack_threshold)
 {
     memset(tracker, 0, sizeof(frequency_tracker_t));
-    tracker->time_window = time_window;
+    tracker->time_window = time_window_frequency;
     tracker->attack_threshold = attack_threshold;
 }
 

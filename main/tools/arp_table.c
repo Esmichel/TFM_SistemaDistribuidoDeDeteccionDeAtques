@@ -1,33 +1,38 @@
+#include "arp_table.h"
+
 #include <stdio.h>
 #include <string.h>
 #include <inttypes.h>
-#include "esp_log.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "esp_wifi.h"
-#include "arp_table.h"
-#include "lwip/etharp.h"
 #include "lwip/ip_addr.h"
+#include "lwip/etharp.h"
 #include "lwip/netif.h"
 #include "lwip/inet.h"
 #include "esp_netif.h"
 #include "esp_netif_net_stack.h"
+#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_wifi.h"
+#include "centralized_config.h"
 #include "../MQTT_Comunication/network_status.h"
 
 #define TAG "ARP_SCAN"
-#define ARP_REQUEST_TIMEOUT 1000
-#define SCAN_CYCLE_DELAY 5000
-#define MAX_ARP_ENTRIES 50
-#define BATCH_SIZE 5
+// #define arp_request_timeout 1000
+// #define scan_cycle_delay 5000
+// #define MAX_ARP_ENTRIES 50
+// #define batch_size 5
+
+// loaded config values
+int arp_request_timeout = 0;
+int scan_cycle_delay = 0;
+int max_arp_entries = 0;
+int batch_size = 0;
 
 static uint32_t last_scanned_ip = 0;
-
-
 static arp_entry_t arp_table[MAX_ARP_ENTRIES];
 static int arp_table_size = 0;
 static bool arp_table_initialized = false;
 static TaskHandle_t arp_scan_task_handle = NULL;
-
 
 void print_mac(const uint8_t *mac)
 {
@@ -167,9 +172,9 @@ void arp_scan_task(void *pvParameter)
         }
         while (ntohl(current_ip.addr) < ntohl(last_ip.addr))
         {
-            ip4_addr_t batch_ips[BATCH_SIZE];
+            ip4_addr_t batch_ips[batch_size];
             int batch_count = 0;
-            while (batch_count < BATCH_SIZE && (ntohl(current_ip.addr) < ntohl(last_ip.addr)))
+            while (batch_count < batch_size && (ntohl(current_ip.addr) < ntohl(last_ip.addr)))
             {
                 if (current_ip.addr != ip_info.ip.addr)
                 {
@@ -180,7 +185,7 @@ void arp_scan_task(void *pvParameter)
                 current_ip.addr = htonl(ntohl(current_ip.addr) + 1);
             }
             last_scanned_ip = ntohl(current_ip.addr);
-            vTaskDelay(ARP_REQUEST_TIMEOUT / portTICK_PERIOD_MS);
+            vTaskDelay(arp_request_timeout / portTICK_PERIOD_MS);
             for (int i = 0; i < batch_count; i++)
             {
                 struct eth_addr *eth_ret = NULL;
@@ -193,13 +198,18 @@ void arp_scan_task(void *pvParameter)
         }
         ESP_LOGI(TAG, "Completed scan cycle. ARP table size: %d", arp_table_size);
         print_arp_table();
-        vTaskDelay(SCAN_CYCLE_DELAY / portTICK_PERIOD_MS);
+        vTaskDelay(scan_cycle_delay / portTICK_PERIOD_MS);
         build_arp_table_json_payload(arp_table, arp_table_size);
     }
 }
 
 void arp_table_init(void)
 {
+    AppConfig *config = get_config();
+    arp_request_timeout = config->arp_request_timeout;
+    scan_cycle_delay = config->scan_cycle_delay;
+    batch_size = config->batch_size;
+
     if (!arp_table_initialized)
     {
         memset(arp_table, 0, sizeof(arp_table));

@@ -5,8 +5,9 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <arpa/inet.h>
+#include "tools/centralized_config.h"
 
-#define MAX_ARP_ENTRIES 100
+//#define MAX_ARP_ENTRIES 100
 
 static const char *TAG = "evil_twin_detection";
 
@@ -99,6 +100,6 @@ void log_arp_spoofing_event(uint32_t ip, uint8_t *mac)
 {
     printf("ARP Spoofing Detected!\n");
     printf("IP: %u.%u.%u.%u, MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
-           (unsigned int)((ip >> 24) & 0xFF), (unsigned int)((ip >> 16) & 0xFF), (unsigned int)((ip >> 8) & 0xFF), (unsigned int)(ip & 0xFF),
+           (unsigned int)((ip >> 24) & 0xFF), (unsigned int)((ip >> 16) & 0xFF), (unsigned int)((ip >> 8) & 0xFF), (unsigned int)(ip & 0xFF), 
            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }

@@ -1,14 +1,20 @@
 #ifndef ESTANDARD_DEVIATION_H
 #define ESTANDARD_DEVIATION_H
 
-#define MAX_SAMPLES 50
-#define MAX_VARIABLES 10  // Número máximo de variables diferentes que podemos analizar
+// #define MAX_SAMPLES 50
+// #define MAX_VARIABLES 10  // Número máximo de variables diferentes que podemos analizar
+
+#include <math.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include "../tools/centralized_config.h"
 
 typedef struct {
-    char variable_name[20];  // Nombre de la variable analizada (ej: "src_mac", "packet_size", "flags")
+    char variable_name[20];
     double values[MAX_SAMPLES];  
-    int count;               // Contador de elementos procesados
-    double sum;              // Suma de los valores de la desviación estándar
+    int count;               
+    double sum;             
 } std_dev_data_t;
 
 

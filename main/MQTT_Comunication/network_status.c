@@ -1,23 +1,5 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include "esp_log.h"
 #include "network_status.h"
-#include "esp_system.h"
-#include "esp_wifi.h"
-#include "esp_wifi_types.h"
-#include "esp_event.h"
-#include "cJSON.h"
-#include "esp_err.h"
-#include "esp_timer.h"
-#include "requester.h"
-#include "../tools/base64encoding.h"
-#include "mbedtls/base64.h"
-#include "../tools/hash_function.h"
-#include "../tools/arp_table.h"
 
-#define MAX_PACKET_SIZE 2048
-#define MAX_MAC_ADDRESS_LEN 18
 #define MQTT_TOPIC "wifi/status"
 #define LOG_TAG "network_status"
 static const char *TAG = "network_status";
@@ -58,6 +40,16 @@ uint32_t generate_packet_hash(wifi_packet_t *wifi_pkt)
     snprintf(data_to_hash, sizeof(data_to_hash), "%s-%lu-%s-%d-%s",
              (char *)wifi_pkt->src_mac, wifi_pkt->timestamp, wifi_pkt->protocol,
              wifi_pkt->signal_strength, wifi_pkt->payload);
+
+    return hash_ssid(data_to_hash);
+}
+
+uint32_t generate_alert_hash(wifi_packet_t *wifi_pkt, char *attack)
+{
+    char data_to_hash[1024];
+    snprintf(data_to_hash, sizeof(data_to_hash), "%s-%lu-%d-%s",
+             (char *)wifi_pkt->src_mac, wifi_pkt->timestamp,
+             wifi_pkt->signal_strength, attack);
 
     return hash_ssid(data_to_hash);
 }
@@ -115,8 +107,9 @@ void send_wifi_packet_json(wifi_packet_t *wifi_pkt)
         ESP_LOGE(TAG, "Failed to create JSON object");
         return;
     }
-
-    char *sender_id = generate_sender_id(wifi_pkt->src_mac);
+    uint8_t mac[6];
+    esp_wifi_get_mac(ESP_IF_WIFI_STA, mac);
+    char *sender_id = generate_sender_id(mac);
     if (sender_id != NULL)
     {
         cJSON_AddStringToObject(root, "sender_id", sender_id);
@@ -207,6 +200,15 @@ void build_arp_table_json_payload(arp_entry_t *arp_table, int arp_table_size)
     strftime(iso_timestamp, sizeof(iso_timestamp), "%Y-%m-%dT%H:%M:%SZ", t);
     cJSON_AddStringToObject(root, "timestamp", iso_timestamp);
 
+    uint8_t mac[6];
+    esp_wifi_get_mac(ESP_IF_WIFI_STA, mac);
+    char *sender_id = generate_sender_id(mac);
+    if (sender_id != NULL)
+    {
+        cJSON_AddStringToObject(root, "sender_id", sender_id);
+        free(sender_id);
+    }
+
     cJSON *entries = cJSON_CreateArray();
     for (int i = 0; i < arp_table_size; i++)
     {
@@ -233,5 +235,41 @@ void build_arp_table_json_payload(arp_entry_t *arp_table, int arp_table_size)
     char *json_string = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
     send_mqtt_message(ARP_TOPIC, json_string);
+    free(json_string);
+}
+
+void build_attack_alert_payload(wifi_packet_t *wifi_pkt, char *attack)
+{
+    cJSON *root = cJSON_CreateObject();
+    time_t now = time(NULL);
+    struct tm *t = gmtime(&now);
+    char iso_timestamp[30];
+    strftime(iso_timestamp, sizeof(iso_timestamp), "%Y-%m-%dT%H:%M:%SZ", t);
+    cJSON_AddStringToObject(root, "timestamp", iso_timestamp);
+
+    char *sender_id = generate_sender_id(wifi_pkt->src_mac);
+    if (sender_id != NULL)
+    {
+        cJSON_AddStringToObject(root, "sender_id", sender_id);
+        free(sender_id);
+    }
+
+    uint32_t alert_hash = generate_alert_hash(wifi_pkt, attack);
+    cJSON_AddNumberToObject(root, "alert_hash", alert_hash);
+
+    char *src_mac_str = mac_to_string(wifi_pkt->src_mac);
+    char *dst_mac_str = mac_to_string(wifi_pkt->dst_mac);
+    cJSON_AddStringToObject(root, "src_mac", src_mac_str ? src_mac_str : "unknown");
+    cJSON_AddStringToObject(root, "dst_mac", dst_mac_str ? dst_mac_str : "unknown");
+    free(src_mac_str);
+    free(dst_mac_str);
+
+    cJSON_AddNumberToObject(root, "signal_strength", wifi_pkt->signal_strength);
+    cJSON_AddStringToObject(root, "attack_type", attack);
+    cJSON_AddStringToObject(root, "ssid", (const char *)wifi_pkt->ssid);
+
+    char *json_string = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    send_mqtt_message(ALERT_TOPIC, json_string);
     free(json_string);
 }

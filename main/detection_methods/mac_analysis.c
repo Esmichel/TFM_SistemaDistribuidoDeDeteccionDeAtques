@@ -4,7 +4,19 @@
 #include <stdio.h>
 
 static const char *TAG = "mac_analysis";
+// loaded config values
+int time_window_mac_analysis = 0;
+int spoofing_time_threshold = 0;
+
+void init_mac_analysis(void) {
+    AppConfig *config = get_config();
+    time_window_mac_analysis = config->time_window_mac_analysis;
+    spoofing_time_threshold = config->spoofing_time_threshold;
+}
 void init_mac_history(mac_history_t *history) {
+    AppConfig *config = get_config();
+    time_window_mac_analysis = config->time_window_mac_analysis;
+    spoofing_time_threshold = config->spoofing_time_threshold;
     memset(history, 0, sizeof(mac_history_t));
 }
 
@@ -35,12 +47,12 @@ mac_analysis_result_t analyze_mac_activity(mac_history_t *history, const uint8_t
             continue;
         }
 
-        if ((timestamp - history->entries[i].last_seen) < TIME_WINDOW) {
+        if ((timestamp - history->entries[i].last_seen) < time_window_mac_analysis) {
             active_macs++;
         }
 
         if (memcmp(history->entries[i].mac, src_mac, 6) == 0) {
-            if ((timestamp - history->entries[i].last_seen) < SPOOFING_TIME_THRESHOLD) {
+            if ((timestamp - history->entries[i].last_seen) < spoofing_time_threshold) {
                 result.spoofing_detected = true;
             }
         }

@@ -1,10 +1,8 @@
 #ifndef SNIFFER_MODULE_H
 #define SNIFFER_MODULE_H
 
-#include "esp_wifi.h"
-#include "esp_event.h"
-#include "esp_log.h"
-
+#include <stdint.h>
+#include <stdbool.h>
 typedef enum {
     FILTER_MANAGEMENT_ONLY,
     FILTER_MANAGEMENT_AND_CONTROL,
@@ -57,7 +55,6 @@ typedef struct {
     int8_t signal_strength;
     uint8_t ssid_length;
     uint8_t ssid[32];
-
     char packet_id[32]; 
     uint16_t src_port; 
     uint16_t dst_port;   
@@ -69,7 +66,7 @@ typedef struct {
 
 void wifi_sniffer_init(sniffer_filter_t filter);
 void wifi_sniffer_start(void);
-void wifi_sniffer_stop(void); 
-
+void wifi_sniffer_stop(void);
+void sniffer_update_config();
 
 #endif

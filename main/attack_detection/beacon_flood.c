@@ -1,22 +1,21 @@
 #include "beacon_flood.h"
-#include "esp_log.h"
-#include "detection_methods/frequency_analysis.h"
-#include <string.h>
-#include <sys/time.h>
-#include "../tools/hash_function.h"
 
-#define ATTACK_TYPE_BEACON_FLOOD 4 
-#define BEACON_EXPIRATION_TIME 60000 
+//#define ATTACK_TYPE_BEACON_FLOOD 4 
+//#define BEACON_EXPIRATION_TIME 60000 
 
 static const char *TAG = "beacon_flood";
 beacon_stats_t beacon_stats; 
 frequency_entry_t *frequency_tracker_entry;
 
+// loaded config values
+int beacon_expiration_time = 0;
+int max_tracked_sources = 0;
+int time_window = 0;
+
 bool is_entry_stale(uint32_t last_timestamp, uint32_t current_timestamp)
 {
-    return (current_timestamp - last_timestamp > BEACON_EXPIRATION_TIME);
+    return (current_timestamp - last_timestamp > beacon_expiration_time);
 }
-
 
 void detect_beacon_flood(wifi_packet_t *pkt)
 {
@@ -37,7 +36,7 @@ void detect_beacon_flood(wifi_packet_t *pkt)
     }
     uint32_t ssid_hash = hash_ssid((char *)ssid);
 
-    for (int i = 0; i < MAX_TRACKED_SOURCES; i++)
+    for (int i = 0; i < max_tracked_sources; i++)
     {
         /*if (is_entry_stale(beacon_stats.frequency_tracker.entries[i].last_timestamp, timestamp))
         {
@@ -59,7 +58,7 @@ void detect_beacon_flood(wifi_packet_t *pkt)
 
     if (frequency_tracker_entry == NULL)
     {
-        if (beacon_stats.frequency_tracker.count < MAX_TRACKED_SOURCES)
+        if (beacon_stats.frequency_tracker.count < max_tracked_sources)
         {
 
             frequency_tracker_entry = &beacon_stats.frequency_tracker.entries[beacon_stats.frequency_tracker.count];
@@ -104,9 +103,17 @@ void detect_beacon_flood(wifi_packet_t *pkt)
 
 void initialize_beacon_detection()
 {
+    AppConfig *config = get_config();
+    beacon_expiration_time = config->beacon_expiration_time;
+    max_tracked_sources = config->max_tracked_sources;
+    time_window = config->time_window;
+    ESP_LOGI(TAG, "Beacon expiration time: %d ms", beacon_expiration_time);
+    ESP_LOGI(TAG, "Beacon Flood Detection Initialized");
+    ESP_LOGI(TAG, "Max tracked sources: %d", max_tracked_sources);
+    ESP_LOGI(TAG, "Time window: %d ms", time_window);
     memset(&beacon_stats, 0, sizeof(beacon_stats));
     init_frequency_tracker(&beacon_stats.frequency_tracker, 5000, 50);
-    for (int i = 0; i < MAX_TRACKED_SOURCES; i++)
+    for (int i = 0; i < max_tracked_sources; i++)
     {
         memset(&beacon_stats.frequency_tracker.entries[i], 0, sizeof(frequency_entry_t));
     }

@@ -9,8 +9,8 @@
 extern "C" {
 #endif
 
-#define MAX_DEVICE_ENTRIES 50
-#define ENTRY_TTL (600 * configTICK_RATE_HZ)
+// #define MAX_DEVICE_ENTRIES 50
+// #define ENTRY_TTL (600 * configTICK_RATE_HZ)
 
 typedef struct mac_entry_t {
     uint32_t ip_addr;

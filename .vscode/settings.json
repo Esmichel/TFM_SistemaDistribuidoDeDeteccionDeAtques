@@ -10,5 +10,15 @@
     "idf.flashType": "UART",
     "idf.customExtraVars": {
         "IDF_TARGET": "esp32"
-    }
+    },
+    "files.associations": {
+        "mac_address_module.h": "c",
+        "hash_function.h": "c",
+        "centralized_config.h": "c",
+        "l3_processor.h": "c",
+        "arp_table.h": "c",
+        "mac_spoofing.h": "c",
+        "string.h": "c"
+    },
+    "sonarlint.pathToCompileCommands": "${workspaceFolder}/build/bootloader/compile_commands.json"
 }

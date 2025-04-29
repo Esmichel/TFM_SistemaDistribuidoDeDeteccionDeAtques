@@ -1,24 +1,23 @@
 #include "requester.h"
-#include "mqtt_client.h"
-#include "esp_log.h"
-#include "string.h"
-#include "nvs_flash.h"
-#include "nvs.h"
-#include "cJSON.h"
-#include "esp_system.h"
-#include "esp_mac.h"
-#include "esp_wifi.h"
+#include <time.h>
+#include "mqtt_fragment_buffer.h"
+#include <stdbool.h>
 
-static const char *TAG = "MQTT_APP";
+static mqtt_fragment_buffer_t frag_buf;
+
 esp_mqtt_client_handle_t client = NULL;
-
 #define LOG_TAG "MQTT_APP"
-#define MQTT_QOS 1
-#define MQTT_RETAIN 1
+// #define mqtt_qos 1
+// #define mqtt_retain 1
+static bool heartbeat_task_started = false;
+// loaded config values
+int mqtt_qos = 0;
+int mqtt_retain = 0;
 
 extern SemaphoreHandle_t wifi_semaphore;
-typedef struct {
-    char *topic;  
+typedef struct
+{
+    char *topic;
     char *payload;
     int qos;
     int retain;
@@ -31,10 +30,9 @@ static esp_mqtt_client_config_t mqtt_cfg = {
     .broker.address.uri = BROKER_URI,
     .credentials = {
         .username = "admin",
-        .authentication.password = "admin"
-    },
-   // .session.keepalive = 60,
-   // .session.disable_clean_session = true,
+        .authentication.password = "admin"},
+    .session.keepalive = 60,
+    .session.disable_clean_session = true,
 };
 
 char device_id[20];
@@ -46,67 +44,69 @@ void generate_unique_id()
             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
-#define NVS_NAMESPACE "storage"
-#define NVS_KEY_ANNOUNCED "announced"
-bool is_announced = false;
-
-esp_err_t check_device_announcement()
+void send_response(const char *correlation_id, const char *content)
 {
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    char topic[64];
+    snprintf(topic, sizeof(topic), RESPONSE_TOPIC_FORMAT, device_id);
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "device_id", device_id);
+    cJSON_AddStringToObject(root, "correlation_id", correlation_id);
+    cJSON_AddStringToObject(root, "content", content);
+
+    char *json_str = cJSON_PrintUnformatted(root);
+    send_mqtt_message(topic, json_str);
+    free(json_str);
+    cJSON_Delete(root);
+}
+
+void handle_incoming_config(cJSON *json)
+{
+    cJSON *target = cJSON_GetObjectItem(json, "device_id");
+    if (cJSON_IsString(target))
     {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-    if (ret != ESP_OK)
-    {
-        ESP_LOGE(LOG_TAG, "Failed to init NVS");
-        return ret;
-    }
-    nvs_handle_t handle;
-    ret = nvs_open(NVS_NAMESPACE, NVS_READONLY, &handle);
-    if (ret == ESP_OK)
-    {
-        uint8_t flag = 0;
-        ret = nvs_get_u8(handle, NVS_KEY_ANNOUNCED, &flag);
-        if (ret == ESP_OK)
+        if (strcmp(target->valuestring, device_id) != 0)
         {
-            is_announced = (flag == 1);
+            ESP_LOGI(LOG_TAG, "Config not intended for this device. Ignoring.");
+            return;
         }
-        nvs_close(handle);
     }
-    return ESP_OK;
+
+    char *json_str = cJSON_PrintUnformatted(json);
+    if (!json_str)
+    {
+        ESP_LOGE(LOG_TAG, "Failed to serialize JSON for config update");
+        return;
+    }
+
+    config_update_from_json(json_str, strlen(json_str));
+    free(json_str);
+
+    ESP_LOGI(LOG_TAG, "Updated configuration from MQTT");
 }
 
-esp_err_t set_device_announced()
+void send_heartbeat(void)
 {
-    nvs_handle_t handle;
-    esp_err_t ret = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle);
-    if (ret != ESP_OK)
-    {
-        return ret;
-    }
-    ret = nvs_set_u8(handle, NVS_KEY_ANNOUNCED, 1);
-    if (ret == ESP_OK)
-    {
-        nvs_commit(handle);
-        is_announced = true;
-    }
-    nvs_close(handle);
-    return ret;
+
+    char topic[64];
+    snprintf(topic, sizeof(topic), "%s/%s", DISCOVERY_TOPIC, device_id);
+
+    char payload[128];
+    snprintf(payload, sizeof(payload),
+             "{\"device_id\":\"%s\", \"status\":\"online\"}",
+             device_id);
+
+    esp_mqtt_client_publish(client, topic, payload, 0, mqtt_qos, mqtt_retain);
+
+    ESP_LOGI(LOG_TAG, "Heartbeat enviado a '%s'", topic);
 }
 
-void announce_device()
+void heartbeat_task(void *param)
 {
-    if (!is_announced)
+    while (true)
     {
-        ESP_LOGI(LOG_TAG, "Announcing device: %s", device_id);
-        esp_mqtt_client_publish(client, DISCOVERY_TOPIC, device_id, 0, MQTT_QOS, MQTT_RETAIN);
-        set_device_announced();
-    }
-    else
-    {
-        ESP_LOGI(LOG_TAG, "Device already announced");
+        send_heartbeat();
+        vTaskDelay(20000 / portTICK_PERIOD_MS);
     }
 }
 
@@ -114,7 +114,8 @@ void buffer_message(const char *formatted_topic, const char *payload, int qos, i
 {
     mqtt_message_t msg;
     msg.topic = strdup(formatted_topic);
-    msg.payload = strdup(payload);
+    if (payload != NULL)
+        msg.payload = strdup(payload);
     msg.qos = qos;
     msg.retain = retain;
     if (offlineQueue != NULL)
@@ -135,7 +136,7 @@ void buffer_message(const char *formatted_topic, const char *payload, int qos, i
 
 void flush_offline_messages()
 {
-    ESP_LOGW(LOG_TAG,"Free heap size: %d bytes\n", esp_get_free_heap_size());
+    ESP_LOGW(LOG_TAG, "Free heap size: %d bytes\n", esp_get_free_heap_size());
     mqtt_message_t msg;
     while (uxQueueMessagesWaiting(offlineQueue) > 0)
     {
@@ -148,7 +149,6 @@ void flush_offline_messages()
         }
     }
 }
-
 
 void send_mqtt_message(const char *topic, const char *payload)
 {
@@ -165,16 +165,93 @@ void send_mqtt_message(const char *topic, const char *payload)
 
     if (xSemaphoreTake(wifi_semaphore, 0))
     {
-        ESP_LOGI(TAG, "Wi-Fi connected! Sending message on topic: %s", formatted_topic);
-        int msg_id = esp_mqtt_client_publish(client, formatted_topic, payload, 0, MQTT_QOS, MQTT_RETAIN);
-        ESP_LOGI(TAG, "Message sent with ID: %d", msg_id);
+        ESP_LOGI(LOG_TAG, "Wi-Fi connected! Sending message on topic: %s", formatted_topic);
+        int msg_id = esp_mqtt_client_publish(client, formatted_topic, payload, 0, mqtt_qos, mqtt_retain);
+        ESP_LOGI(LOG_TAG, "Message sent with ID: %d", msg_id);
         xSemaphoreGive(wifi_semaphore);
     }
     else
     {
-        ESP_LOGW(TAG, "Wi-Fi not connected! Buffering message.");
-        buffer_message(formatted_topic, payload, MQTT_QOS, MQTT_RETAIN);
+        ESP_LOGW(LOG_TAG, "Wi-Fi not connected! Buffering message.");
+        buffer_message(formatted_topic, payload, mqtt_qos, mqtt_retain);
     }
+}
+
+static void add_config_item(cJSON *array, ConfigItem *item)
+{
+    cJSON *param = cJSON_CreateObject();
+    cJSON_AddStringToObject(param, "name", item->key);
+    cJSON_AddStringToObject(param, "description", item->description);
+
+    const char *type_str = "";
+    switch (item->type)
+    {
+    case CONFIG_TYPE_INT:
+        type_str = "int";
+        break;
+    case CONFIG_TYPE_LONG:
+        type_str = "long";
+        break;
+    case CONFIG_TYPE_BOOL:
+        type_str = "bool";
+        break;
+    case CONFIG_TYPE_FLOAT:
+        type_str = "float";
+        break;
+    }
+    cJSON_AddStringToObject(param, "type", type_str);
+
+    switch (item->type)
+    {
+    case CONFIG_TYPE_INT:
+        cJSON_AddNumberToObject(param, "defaultValue", *((int *)item->addr));
+        break;
+    case CONFIG_TYPE_LONG:
+        cJSON_AddNumberToObject(param, "defaultValue", *((long *)item->addr));
+        break;
+    case CONFIG_TYPE_BOOL:
+        cJSON_AddBoolToObject(param, "defaultValue", *((bool *)item->addr));
+        break;
+    case CONFIG_TYPE_FLOAT:
+        cJSON_AddNumberToObject(param, "defaultValue", *((float *)item->addr));
+        break;
+    }
+
+    cJSON_AddItemToArray(array, param);
+}
+
+void send_config_summary(const char *response_topic)
+{
+    ESP_LOGI(LOG_TAG, "Building config summary…");
+    ESP_LOGI(LOG_TAG, "Topic to publish: %s", response_topic);
+
+    // root object
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "deviceId", device_id);
+    cJSON_AddStringToObject(root, "type", "config_params");
+
+    // payload array
+    cJSON *payload = cJSON_CreateArray();
+    for (size_t i = 0; i < config_items_count; ++i)
+    {
+        add_config_item(payload, &config_items[i]);
+    }
+    cJSON_AddItemToObject(root, "payload", payload);
+
+    // serialize & publish
+    char *json_str = cJSON_PrintUnformatted(root);
+    if (json_str)
+    {
+        int msg_id = esp_mqtt_client_publish(client,
+                                             response_topic,
+                                             json_str,
+                                             0,
+                                             /*mqtt_qos*/0,
+                                             /*mqtt_retain*/0);
+        ESP_LOGI(LOG_TAG, "Published config summary, msg_id=%d", msg_id);
+        free(json_str);
+    }
+    cJSON_Delete(root);
 }
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
@@ -185,15 +262,20 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     {
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(LOG_TAG, "Connected to broker");
-        esp_mqtt_client_subscribe(client, REQUEST_TOPIC, MQTT_QOS);
+        esp_mqtt_client_subscribe(client, REQUEST_TOPIC, mqtt_qos);
         {
             char device_topic[64];
             snprintf(device_topic, sizeof(device_topic), "rabbitmq/queue/%s", device_id);
             ESP_LOGI(LOG_TAG, "Subscribing to device topic: %s", device_topic);
-            esp_mqtt_client_subscribe(client, device_topic, MQTT_QOS);
+            esp_mqtt_client_subscribe(client, device_topic, mqtt_qos);
+            esp_mqtt_client_subscribe(client, "sistema/configuracion/#", mqtt_qos);
         }
-        check_device_announcement();
-        announce_device();
+        send_heartbeat();
+        if (!heartbeat_task_started)
+        {
+            xTaskCreate(heartbeat_task, "heartbeat_task", 4096, NULL, 5, NULL);
+            heartbeat_task_started = true;
+        }
         flush_offline_messages();
         break;
 
@@ -203,34 +285,69 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
     case MQTT_EVENT_DATA:
     {
-        ESP_LOGI(LOG_TAG, "Received MQTT data");
-        char topic[event->topic_len + 1];
-        strncpy(topic, event->topic, event->topic_len);
-        topic[event->topic_len] = '\0';
-        char data[event->data_len + 1];
-        strncpy(data, event->data, event->data_len);
-        data[event->data_len] = '\0';
-        ESP_LOGI(LOG_TAG, "Topic: %s", topic);
-        ESP_LOGI(LOG_TAG, "Message: %s", data);
+        if (event->current_data_offset == 0)
+        {
+            mqtt_fragment_buffer_free(&frag_buf);
+            mqtt_fragment_buffer_init(&frag_buf, event->total_data_len);
+        }
 
-        cJSON *json = cJSON_Parse(data);
-        if (json == NULL)
+        mqtt_fragment_buffer_add(&frag_buf, event->data, event->data_len, event->current_data_offset);
+
+        if (mqtt_fragment_buffer_is_complete(&frag_buf))
         {
-            ESP_LOGE(LOG_TAG, "Failed to parse JSON");
-            break;
-        }
-        cJSON *response_topic_json = cJSON_GetObjectItem(json, "response_topic");
-        if (!cJSON_IsString(response_topic_json))
-        {
-            ESP_LOGE(LOG_TAG, "Invalid response_topic in JSON");
+            const char *full_msg = mqtt_fragment_buffer_get(&frag_buf);
+
+            char topic[event->topic_len + 1];
+            strncpy(topic, event->topic, event->topic_len);
+            topic[event->topic_len] = '\0';
+
+            ESP_LOGI(LOG_TAG, "Topic: %s", topic);
+            ESP_LOGI(LOG_TAG, "Message: %s", full_msg);
+
+            cJSON *json = cJSON_Parse(full_msg);
+            if (json == NULL)
+            {
+                ESP_LOGE(LOG_TAG, "Failed to parse JSON");
+                break;
+            }
+
+            cJSON *correlation_id = cJSON_GetObjectItem(json, "correlation_id");
+            if (cJSON_IsString(correlation_id))
+            {
+                send_response(correlation_id->valuestring, "Ack");
+            }
+
+            cJSON *type = cJSON_GetObjectItem(json, "type");
+            cJSON *resp_topic = cJSON_GetObjectItem(json, "response_topic");
+            if (cJSON_IsString(type) &&
+                strcmp(type->valuestring, "get_config") == 0 &&
+                cJSON_IsString(resp_topic))
+            {
+                send_config_summary(resp_topic->valuestring);
+                cJSON_Delete(json);
+                break;
+            }
+
+            handle_incoming_config(json);
+
+            if (cJSON_IsString(resp_topic))
+            {
+                char response_topic[64];
+                snprintf(response_topic, sizeof(response_topic),
+                         RESPONSE_TOPIC_FORMAT,
+                         resp_topic->valuestring);
+
+                ESP_LOGI(LOG_TAG, "Publishing response to: %s", response_topic);
+                esp_mqtt_client_publish(client,
+                                        response_topic,
+                                        "Response from device",
+                                        0,
+                                        mqtt_qos,
+                                        mqtt_retain);
+            }
+
             cJSON_Delete(json);
-            break;
         }
-        char response_topic[64];
-        snprintf(response_topic, sizeof(response_topic), RESPONSE_TOPIC_FORMAT, response_topic_json->valuestring);
-        ESP_LOGI(LOG_TAG, "Publishing response to: %s", response_topic);
-        esp_mqtt_client_publish(client, response_topic, "Response from device", 0, MQTT_QOS, MQTT_RETAIN);
-        cJSON_Delete(json);
         break;
     }
 
@@ -246,7 +363,11 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
 void mqtt_app_start()
 {
-    if (offlineQueue == NULL) {
+    AppConfig *config = get_config();
+    mqtt_qos = config->mqtt_qos;
+    mqtt_retain = config->mqtt_retain;
+    if (offlineQueue == NULL)
+    {
         offlineQueue = xQueueCreate(OFFLINE_QUEUE_SIZE, sizeof(mqtt_message_t));
     }
     generate_unique_id();
@@ -261,7 +382,7 @@ void mqtt_app_stop()
     {
         ESP_LOGI(LOG_TAG, "Stopping MQTT client...");
         esp_mqtt_client_stop(client);
-        vTaskDelay(100 / portTICK_PERIOD_MS);
+        vTaskDelay(10 / portTICK_PERIOD_MS);
         esp_mqtt_client_destroy(client);
         client = NULL;
         ESP_LOGI(LOG_TAG, "MQTT client stopped and destroyed");
