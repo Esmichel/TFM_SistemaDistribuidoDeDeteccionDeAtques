@@ -198,11 +198,37 @@ wifi_packet_t create_wifi_packet(wifi_promiscuous_pkt_t *pkt, wifi_promiscuous_p
     uint16_t frame_control = payload[0] | (payload[1] << 8);
     wifi_pkt.type = (frame_control & WIFI_FC_TYPE_MASK) >> 2;
     wifi_pkt.subtype = (frame_control & WIFI_FC_SUBTYPE_MASK) >> 4;
-    memcpy(wifi_pkt.dst_mac, payload + 4, MAC_ADDR_LEN);
-    memcpy(wifi_pkt.src_mac, payload + 10, MAC_ADDR_LEN);
-
+    bool toDS   = (frame_control & BIT(8)) != 0;
+    bool fromDS = (frame_control & BIT(9)) != 0;
+    
+    uint8_t *addr1 = payload + 4;
+    uint8_t *addr2 = payload + 10;
+    uint8_t *addr3 = payload + 16;
+    uint8_t *addr4 = payload + 24;
+    
+    if (!toDS && !fromDS) {
+        // modo ad-hoc
+        memcpy(wifi_pkt.dst_mac, addr1, 6);
+        memcpy(wifi_pkt.src_mac, addr2, 6);
+    }
+    else if (toDS && !fromDS) {
+        // cliente → AP
+        memcpy(wifi_pkt.dst_mac, addr1, 6);
+        memcpy(wifi_pkt.src_mac, addr2, 6);
+    }
+    else if (!toDS && fromDS) {
+        // AP → cliente
+        memcpy(wifi_pkt.dst_mac, addr1, 6);
+        memcpy(wifi_pkt.src_mac, addr2, 6);
+    }
+    else if (toDS && fromDS) {
+        // WDS: entre APs
+        memcpy(wifi_pkt.dst_mac, addr1, 6);
+        memcpy(wifi_pkt.src_mac, addr2, 6);
+    }
     wifi_pkt.timestamp = pkt->rx_ctrl.timestamp;
     wifi_pkt.signal_strength = pkt->rx_ctrl.rssi;
+    pkt->rx_ctrl.
 
     uint8_t *tagged_params;
     uint8_t ssid_length = 0;
