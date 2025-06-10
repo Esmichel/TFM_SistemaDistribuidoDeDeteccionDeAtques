@@ -14,7 +14,7 @@
 #include "freertos/task.h"
 #include "esp_wifi.h"
 #include "centralized_config.h"
-#include "../MQTT_Comunication/network_status.h"
+#include "../../components/mqtt_communication/network_status.h"
 
 #define TAG "ARP_SCAN"
 // #define arp_request_timeout 1000
@@ -63,7 +63,7 @@ void update_arp_table(uint32_t ip, uint8_t *mac)
     }
     if (arp_table_size >= MAX_ARP_ENTRIES)
     {
-        ESP_LOGW(TAG, "ARP table full, overwriting oldest entry");
+        ESP_LOGI(TAG, "ARP table full, overwriting oldest entry");
         memmove(&arp_table[0], &arp_table[1], sizeof(arp_entry_t) * (MAX_ARP_ENTRIES - 1));
         arp_table_size--;
     }
@@ -199,7 +199,7 @@ void arp_scan_task(void *pvParameter)
         ESP_LOGI(TAG, "Completed scan cycle. ARP table size: %d", arp_table_size);
         print_arp_table();
         vTaskDelay(scan_cycle_delay / portTICK_PERIOD_MS);
-        build_arp_table_json_payload(arp_table, arp_table_size);
+        build_arp_table_json_payload(arp_table, arp_table_size, "active");
     }
 }
 

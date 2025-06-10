@@ -25,7 +25,7 @@ typedef struct
 // #define WIFI_FC_TYPE_CTRL  1
 // #define WIFI_FC_TYPE_DATA  2
 
-//loaded config values
+// loaded config values
 int max_payload_len = 1023;
 int min_printable_seq = 10;
 float low_entropy_threshold = 3.5f;
@@ -74,7 +74,7 @@ void process_wifi_data_frame(const uint8_t *frame, uint16_t length, wifi_packet_
 
     const wifi_ieee80211_hdr_t *hdr = (const wifi_ieee80211_hdr_t *)frame;
     uint16_t fc = hdr->frame_control;
-    uint8_t type = WLAN_FC_TYPE(fc);
+    uint16_t type = WLAN_FC_TYPE(fc);
     uint16_t header_len = 24;
     uint8_t tods = WLAN_FC_TODS(fc);
     uint8_t fromds = WLAN_FC_FROMDS(fc);
@@ -107,23 +107,23 @@ void process_wifi_data_frame(const uint8_t *frame, uint16_t length, wifi_packet_
 
     if (payload_len < sizeof(ip_header_t))
     {
-        // ESP_LOGI(TAG, "Payload is too short to be an IP packet");
+        ESP_LOGI(TAG, "Payload is too short to be an IP packet");
         return;
     }
 
-    ip_header_t *ip_hdr = (ip_header_t *)payload;
-    wifi_pkt->ip_hdr = ip_hdr;
-
-
-
-    if (ip_hdr->protocol != IP_PROTOCOL_TCP) {
-        // ESP_LOGI(TAG, "Not a TCP packet");
-        return;
-    }
-
-    if ((ip_hdr->version_ihl >> 4) != 4)
+    if (wifi_pkt->l2protocol != ETH_TYPE_IP)
     {
-        // ESP_LOGI(TAG, "Not an IPv4 packet");
+        ESP_LOGI(TAG, "Not an IP packet");
+        return;
+    }
+    ip_header_t *ip_hdr = (ip_header_t *)payload;
+    wifi_pkt->dst_addr = ip_hdr->dst_addr;
+    wifi_pkt->src_addr = ip_hdr->src_addr;
+    wifi_pkt->protocol = ip_hdr->protocol;
+    wifi_pkt->ttl = ip_hdr->ttl;
+    if (ip_hdr->protocol != IP_PROTOCOL_TCP && ip_hdr->protocol != IP_PROTOCOL_UDP)
+    {
+        ESP_LOGI(TAG, "Not a TCP packet");
         return;
     }
 
@@ -221,35 +221,30 @@ void process_layer_7_data(const uint8_t *payload, uint16_t length)
                 float entropy = calc_entropy(seq, seq_len);
                 if (entropy < low_entropy_threshold || contains_sensitive_keyword(seq))
                 {
-                    ESP_LOGW(TAG, "Potential sensitive plaintext detected: %s", seq);
+                    // ESP_LOGW(TAG, "Potential sensitive plaintext detected: %s", seq);
+                    send_alert(l7_wifi_pkt, "Potential sensitive plaintext detected: %s", seq);
                 }
             }
             start = i + 1;
         }
     }
-
-    for (uint16_t i = 0; i < copy_len; i++)
-    {
-        if ((i + 1) < copy_len && buf[i] == '\r' && buf[i + 1] == '\n')
-            break;
-        putchar(buf[i]);
-    }
-    putchar('\n');
 }
 
 void process_tcp_packet(const uint8_t *payload, uint16_t length)
 {
     if (length < sizeof(tcp_header_t))
     {
-        // ESP_LOGD(TAG, "TCP packet too small to contain a valid header");
+        ESP_LOGI(TAG, "TCP packet too small to contain a valid header");
         return;
     }
     tcp_header_t *tcp_hdr = (tcp_header_t *)payload;
-    l7_wifi_pkt->ip_hdr->tcp_hdr = tcp_hdr;
+    l7_wifi_pkt->src_port = tcp_hdr->src_port;
+    l7_wifi_pkt->dst_port = tcp_hdr->dst_port;
+    l7_wifi_pkt->flags = tcp_hdr->flags;
     uint16_t tcp_hdr_len = (tcp_hdr->data_offset >> 4) * 4;
     if (length < tcp_hdr_len)
     {
-        // ESP_LOGD(TAG, "TCP packet length less than header length");
+        ESP_LOGI(TAG, "TCP packet length less than header length");
         return;
     }
     ESP_LOGI(TAG, "TCP Packet: Source Port: %d, Destination Port: %d",
@@ -259,19 +254,40 @@ void process_tcp_packet(const uint8_t *payload, uint16_t length)
     process_layer_7_data(app_data, app_data_len);
 }
 
+void process_udp_packet(const uint8_t *payload, uint16_t length)
+{
+    if (length < sizeof(udp_header_t))
+    {
+        ESP_LOGI(TAG, "UDP packet too short for header");
+        return;
+    }
+
+    udp_header_t *udp_hdr = (udp_header_t *)payload;
+    l7_wifi_pkt->src_port = udp_hdr->src_port;
+    l7_wifi_pkt->dst_port = udp_hdr->dst_port;
+
+    ESP_LOGI(TAG, "UDP Packet: Source Port: %d, Destination Port: %d",
+             ntohs(udp_hdr->src_port), ntohs(udp_hdr->dst_port));
+
+    const uint8_t *app_data = payload + sizeof(udp_header_t);
+    uint16_t app_data_len = length - sizeof(udp_header_t);
+    process_layer_7_data(app_data, app_data_len);
+}
+
 void process_ip_packet(const uint8_t *payload, uint16_t length, wifi_packet_t *wifi_pkt)
 {
     if (length < sizeof(ip_header_t))
     {
-        // ESP_LOGD(TAG, "IP packet too short for header");
+        ESP_LOGI(TAG, "IP packet too short for header");
         return;
     }
     ip_header_t *ip_hdr = (ip_header_t *)payload;
     uint8_t ihl = ip_hdr->version_ihl & 0x0F;
     uint16_t ip_hdr_len = ihl * 4;
+
     if (length < ip_hdr_len)
     {
-        // ESP_LOGD(TAG, "IP packet length (%d) is less than header length (%d)", length, ip_hdr_len);
+        ESP_LOGI(TAG, "IP packet length (%d) is less than header length (%d)", length, ip_hdr_len);
         return;
     }
 
@@ -292,9 +308,13 @@ void process_ip_packet(const uint8_t *payload, uint16_t length, wifi_packet_t *w
         ESP_LOGE(TAG, "Error converting destination IP to string");
         strcpy(dst_ip, "Invalid IP");
     }
+    char *src_mac_str = mac_to_string(wifi_pkt->src_mac);
+    char *dst_mac_str = mac_to_string(wifi_pkt->dst_mac);
 
-    ESP_LOGI(TAG, "Source MAC: %s Destination MAC: %s  IP Packet: Source IP: %s, Destination IP: %s, Protocol: %d", mac_to_string(wifi_pkt->src_mac), mac_to_string(wifi_pkt->dst_mac), src_ip, dst_ip, ip_hdr->protocol);
-    wifi_pkt->ip_hdr = ip_hdr;
+    ESP_LOGI(TAG, "Source MAC: %s Destination MAC: %s  IP Packet: Source IP: %s, Destination IP: %s, Protocol: %d", src_mac_str, dst_mac_str, src_ip, dst_ip, ip_hdr->protocol);
+
+    free(src_mac_str);
+    free(dst_mac_str);
 
     if (is_local_ip(ip_hdr->src_addr) && is_unicast_mac(wifi_pkt->src_mac))
     {
@@ -305,7 +325,11 @@ void process_ip_packet(const uint8_t *payload, uint16_t length, wifi_packet_t *w
     {
         process_tcp_packet(payload + ip_hdr_len, length - ip_hdr_len);
     }
-    attack_detector_process(wifi_pkt, payload + ip_hdr_len, length - ip_hdr_len);
+    else if (ip_hdr->protocol == IP_PROTOCOL_UDP)
+    {
+        process_udp_packet(payload + ip_hdr_len, length - ip_hdr_len);
+    }
+    attack_detector_process(wifi_pkt, payload + ip_hdr_len, length - ip_hdr_len, ip_hdr);
 }
 
 void l7_processor_init(void)
@@ -318,5 +342,4 @@ void l7_processor_init(void)
     ESP_LOGI(TAG, "Max Payload Length: %d", max_payload_len);
     ESP_LOGI(TAG, "Min Printable Sequence: %d", min_printable_seq);
     ESP_LOGI(TAG, "Low Entropy Threshold: %.2f", low_entropy_threshold);
-
 }

@@ -15,7 +15,7 @@
 #include "centralized_config.h"
 #include "./attack_detection/mac_spoofing.h"
 #include "../sniffer_module.h"
-#include "../MQTT_Comunication/network_status.h"
+#include "../../components/mqtt_communication/network_status.h"
 
 void l7_processor_init(void);
 void process_wifi_frame(const uint8_t *frame, uint16_t length, wifi_packet_t *wifi_pkt);

@@ -57,11 +57,18 @@ typedef struct {
     uint8_t ssid[32];
     char packet_id[32]; 
     uint16_t src_port; 
-    uint16_t dst_port;   
-    bool is_broadcast;  
+    uint16_t dst_port; 
+    uint32_t src_addr;    
+    uint32_t dst_addr;
+    uint8_t flags;        
+    bool is_broadcast;
+    bool discarded;
+    uint16_t ie_len;
+    uint8_t *ie;
+    uint8_t ttl;    
     uint8_t channel;
-    char protocol[16];
-    ip_header_t *ip_hdr;   
+    uint8_t protocol;
+    uint16_t l2protocol;
 } wifi_packet_t;
 
 void wifi_sniffer_init(sniffer_filter_t filter);

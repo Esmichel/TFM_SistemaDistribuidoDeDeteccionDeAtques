@@ -1,137 +1,165 @@
-
 #include "deauth_attack.h"
 #include "tools/l3_processor.h"
 #include "tools/centralized_config.h"
+#include "detection_methods/frequency_analysis.h"
 #include "esp_log.h"
+#include <stdbool.h>
 #include <string.h>
 
 #define TAG "deauth_attack_detector"
 
-typedef struct {
-    mac_history_t     mac_history;
-    attack_frequency_t frequency_data;
-    uint32_t          last_update_time_ms;
-    uint32_t          current_time_ms;
-} deauth_detection_state_t;
+static frequency_tracker_t deauth_freq_tracker;
+static frequency_tracker_t disassoc_freq_tracker;
+static int mass_deauth_threshold = 1;
+static mac_history_t global_mac_history;
 
-
-static deauth_detection_state_t deauth_detection_state;
-static frequency_tracker_t deauth_frequency_tracker;
-
-static int mass_deauth_threshold = 0;
-
-static uint32_t get_current_time_ms()
+static uint32_t get_current_time_ms(void)
 {
     return esp_timer_get_time() / 1000;
 }
 
-static void update_current_time()
+static bool is_deauth_packet(const wifi_packet_t *pkt)
 {
-    uint32_t new_time = get_current_time_ms();
-    if (new_time - deauth_detection_state.last_update_time_ms >= 1000) {
-        deauth_detection_state.current_time_ms = new_time;
-        deauth_detection_state.last_update_time_ms = new_time;
-    }
+    return pkt->type == 0x00 && pkt->subtype == DEAUTH_PACKET;
 }
 
-static bool is_deauth_attack_packet(const wifi_packet_t *packet)
+static bool is_disassoc_packet(const wifi_packet_t *pkt)
 {
-    return (packet->type == 0x00 && packet->subtype == DEAUTH_PACKET);
+    return pkt->type == 0x00 && pkt->subtype == DISASOCIATION_PACKET;
 }
 
-static bool check_mass_deauth(const mac_analysis_result_t *mac_result)
+static bool check_broadcast_deauth(const wifi_packet_t *pkt)
 {
-    return (mac_result->affected_targets > mass_deauth_threshold);
+    return memcmp(pkt->dst_mac, BROADCAST_MAC, 6) == 0;
 }
 
-static bool check_broadcast_deauth(const wifi_packet_t *packet)
+static bool check_directed_deauth(const mac_analysis_result_t *res)
 {
-    return (memcmp(packet->dst_mac, BROADCAST_MAC, 6) == 0);
+    return (res->affected_targets == 1);
 }
 
-static bool check_directed_deauth(const mac_analysis_result_t *mac_result)
+static bool check_mass_deauth(const mac_analysis_result_t *res)
 {
-    return (mac_result->affected_targets == 1);
+    return (res->affected_targets > mass_deauth_threshold);
 }
 
-void evaluate_deauth_attack(const wifi_packet_t *packet)
+static void log_deauth_alert(const char *what,
+                             const uint8_t mac[6],
+                             frequency_tracker_t *tracker,
+                             const uint8_t key[6],
+                             const wifi_packet_t *pkt,
+                             const char *attack_msg)
 {
-    uint32_t ssid_hash = hash_ssid((const char *)packet->src_mac);
 
-    update_frequency(&deauth_frequency_tracker, &ssid_hash, deauth_detection_state.current_time_ms);
-    add_mac_to_history(&deauth_detection_state.mac_history, packet->src_mac, deauth_detection_state.current_time_ms);
-    add_mac_to_history(&deauth_detection_state.mac_history, packet->dst_mac, deauth_detection_state.current_time_ms);
-
-    mac_analysis_result_t mac_result = analyze_mac_activity(
-        &deauth_detection_state.mac_history,
-        packet->src_mac,
-        packet->dst_mac,
-        deauth_detection_state.current_time_ms
-    );
-
-    char attack_type[50] = {0};
-    bool directed = false, mass = false, broadcast = false;
-
-    if (detect_attack_frequency(
-            &deauth_detection_state.frequency_data,
-            deauth_detection_state.current_time_ms,
-            ATTACK_TYPE_DEAUTH))
+    uint32_t count = 0;
+    for (uint32_t i = 0; i < tracker->num_entries; ++i)
     {
-        // Factor 1: Ataque basado en frecuencia detectado
-        // No cambia la salida directa, solo afecta a lógicas agregadas si amplías
+        if (memcmp(tracker->entries[i].mac, key, 6) == 0)
+        {
+            count = tracker->entries[i].count;
+            break;
+        }
     }
 
-    if (mac_result.spoofing_detected) {
-        strncpy(attack_type, "MAC Spoofing Detectado", sizeof(attack_type) - 1);
-    }
+    ESP_LOGW(TAG, "%s", attack_msg);
+    build_attack_alert_payload((wifi_packet_t *)pkt, (char *)attack_msg);
+}
+static void evaluate_attack(const wifi_packet_t *pkt,
+                            frequency_tracker_t *tracker,
+                            const char *label)
+{
+    uint32_t now = get_current_time_ms();
 
-    if (check_mass_deauth(&mac_result)) {
-        strncpy(attack_type, "Deautenticación Masiva", sizeof(attack_type) - 1);
-        mass = true;
-    }
-    else if (check_broadcast_deauth(packet)) {
-        strncpy(attack_type, "Deautenticación Broadcast", sizeof(attack_type) - 1);
-        broadcast = true;
-    }
-    else if (check_directed_deauth(&mac_result)) {
-        strncpy(attack_type, "Deautenticación Dirigida", sizeof(attack_type) - 1);
-        directed = true;
-    }
+    update_frequency(tracker, pkt->src_mac, now);
+    bool freq_alert = detect_high_frequency_once(tracker, pkt->src_mac, now);
 
-    if (mass || broadcast || directed || mac_result.spoofing_detected) {
-        ESP_LOGI(TAG, "\U0001F6A8 Posible ataque detectado: %s \U0001F6A8", attack_type);
-        ESP_LOGW(TAG, "Deauth Attack Detected! Source MAC: %02X:%02X:%02X:%02X:%02X:%02X",
-            packet->src_mac[0], packet->src_mac[1], packet->src_mac[2],
-            packet->src_mac[3], packet->src_mac[4], packet->src_mac[5]);
+    add_mac_to_history(&global_mac_history, pkt->src_mac, now);
+    add_mac_to_history(&global_mac_history, pkt->dst_mac, now);
+
+    mac_analysis_result_t mac_res = analyze_mac_activity(
+        &global_mac_history,
+        pkt->src_mac,
+        pkt->dst_mac,
+        now);
+
+    char attack_type[32] = {0};
+    if (mac_res.spoofing_detected)
+        strncpy(attack_type, "MAC Spoofing", sizeof(attack_type) - 1);
+    else if (check_broadcast_deauth(pkt))
+        strncpy(attack_type, "Broadcast", sizeof(attack_type) - 1);
+    else if (check_directed_deauth(&mac_res))
+        strncpy(attack_type, "Directed", sizeof(attack_type) - 1);
+    else if (check_mass_deauth(&mac_res))
+        strncpy(attack_type, "Mass", sizeof(attack_type) - 1);
+
+    if (mac_res.spoofing_detected || freq_alert)
+    {
+        uint8_t key[6];
+        memcpy(key, pkt->src_mac, 6);
+
+        char alert_msg[128];
+        int len = snprintf(alert_msg, sizeof(alert_msg),
+                           "%s Flood from %02X:%02X:%02X:%02X:%02X:%02X – count=%lu/%lu window=%lums",
+                           label,
+                           pkt->src_mac[0], pkt->src_mac[1], pkt->src_mac[2],
+                           pkt->src_mac[3], pkt->src_mac[4], pkt->src_mac[5],
+                           get_tracker_count(tracker, key),
+                           tracker->attack_threshold,
+                           tracker->time_window);
+        if (len < 0 || (size_t)len >= sizeof(alert_msg))
+        {
+            alert_msg[sizeof(alert_msg) - 1] = '\0';
+        }
+        log_deauth_alert(label, pkt->src_mac, tracker, key, pkt, alert_msg);
     }
 }
 
-void check_for_deauth_attack(const wifi_packet_t *packet)
+void check_for_deauth_attack(const wifi_packet_t *pkt)
 {
-    if (!is_deauth_attack_packet(packet)) {
-        return;
+    if (is_deauth_packet(pkt))
+    {
+        ESP_LOGI(TAG, "Detected DEAUTH packet");
+        evaluate_attack(pkt, &deauth_freq_tracker, "Deauth");
     }
-
-    update_current_time();
-    ESP_LOGI(TAG, "Paquete de deautenticación sospechoso detectado");
-
-    evaluate_deauth_attack(packet);
+    else if (is_disassoc_packet(pkt))
+    {
+        ESP_LOGI(TAG, "Detected DISASSOC packet");
+        evaluate_attack(pkt, &disassoc_freq_tracker, "Disassoc");
+    }
 }
 
-void initialize_deauth_detection()
+void initialize_deauth_detection(void)
 {
-    const AppConfig *config = get_config();
-
-    mass_deauth_threshold = config->mass_deauth_threshold;
-
-    memset(&deauth_detection_state, 0, sizeof(deauth_detection_state));
-    init_frequency_analysis(&deauth_detection_state.frequency_data);
+    const AppConfig *cfg = get_config();
+    mass_deauth_threshold = cfg->mass_deauth_threshold;
 
     init_frequency_tracker(
-        &deauth_frequency_tracker,
-        config->deauth_time_window,
-        config->deauth_frequency_threshold
-    );
+        &deauth_freq_tracker,
+        cfg->deauth_time_window,
+        cfg->deauth_frequency_threshold);
 
-    ESP_LOGI(TAG, "Deauth attack detection initialized");
+    init_frequency_tracker(
+        &disassoc_freq_tracker,
+        cfg->deauth_time_window,
+        cfg->deauth_frequency_threshold);
+
+    ESP_LOGI(TAG, "Deauth detector initialized");
+}
+
+void reload_deauth_detection_config(void)
+{
+    const AppConfig *cfg = get_config();
+    mass_deauth_threshold = cfg->mass_deauth_threshold;
+
+    reconfigure_frequency_tracker(
+        &deauth_freq_tracker,
+        cfg->deauth_time_window,
+        cfg->deauth_frequency_threshold);
+
+    reconfigure_frequency_tracker(
+        &disassoc_freq_tracker,
+        cfg->deauth_time_window,
+        cfg->deauth_frequency_threshold);
+
+    ESP_LOGI(TAG, "Deauth config reloaded");
 }

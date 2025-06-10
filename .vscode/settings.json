@@ -2,14 +2,13 @@
     "C_Cpp.intelliSenseEngine": "default",
     "idf.espIdfPath": "/home/sergio/esp/esp-idf",
     "idf.openOcdConfigs": [
-        "interface/ftdi/esp32_devkitj_v1.cfg",
-        "target/esp32.cfg"
+        "board/esp32c6-ftdi.cfg"
     ],
     "idf.port": "/dev/ttyUSB0",
     "idf.toolsPath": "/home/sergio/esp/esp-idf/tools",
     "idf.flashType": "UART",
     "idf.customExtraVars": {
-        "IDF_TARGET": "esp32"
+        "IDF_TARGET": "esp32c6"
     },
     "files.associations": {
         "mac_address_module.h": "c",
@@ -18,7 +17,14 @@
         "l3_processor.h": "c",
         "arp_table.h": "c",
         "mac_spoofing.h": "c",
-        "string.h": "c"
+        "string.h": "c",
+        "cstdlib": "c",
+        "sniffer_module.h": "c",
+        "network_status.h": "c",
+        "wifi_station.h": "c",
+        "traffic_analyzer.h": "c",
+        "stdint.h": "c",
+        "esp_log.h": "c"
     },
-    "sonarlint.pathToCompileCommands": "${workspaceFolder}/build/bootloader/compile_commands.json"
+    "sonarlint.pathToCompileCommands": "${workspaceFolder}/compile_commands.json"
 }

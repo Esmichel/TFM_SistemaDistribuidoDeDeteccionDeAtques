@@ -13,7 +13,7 @@
 #include "esp_timer.h"
 #include "esp_netif.h"
 #include "nvs_flash.h"
-#include "./MQTT_Comunication/network_status.h"
+#include "../components/mqtt_communication/network_status.h"
 #include "./tools/mac_address_module.h"
 #include "tools/centralized_config.h"
 

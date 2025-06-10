@@ -1,5 +1,7 @@
 #include "centralized_config.h"
 #include "../sniffer_module.h"
+#include <stdbool.h>
+#include <ctype.h>
 
 #define TAG "CONFIG"
 
@@ -17,7 +19,7 @@
 #define DEFAULT_EVIL_TWIN_SSID_THRESHOLD 3
 #define DEFAULT_MAX_DEVICE_ENTRIES 50
 #define DEFAULT_ENTRY_TTL 60000
-#define DEFAULT_TIME_WINDOW 5000
+#define DEFAULT_TIME_WINDOW 2000
 #define DEFAULT_TIME_WINDOW_FREQUENCY 5000
 #define DEFAULT_TIME_WINDOW_MAC_ANALYSIS 5000
 #define DEFAULT_MAX_TRACKED_SOURCES 50
@@ -29,15 +31,17 @@
 #define DEFAULT_LOW_ENTROPY_THRESHOLD 3.5f
 #define DEFAULT_SWITCH_INTERVAL 10000
 #define DEFAULT_ENABLE_CHANNEL_HOPPING true
+#define DEFAULT_ENABLE_DEDICATED_MODE false
 #define DEFAULT_CHANNEL 6
 #define DEFAULT_DEAUTH_FREQ_THRESHOLD 30
 
 #define ARP_REQUEST_TIMEOUT 1000
 #define SCAN_CYCLE_DELAY 5000
-#define MAX_ARP_ENTRIES 50
 #define BATCH_SIZE 5
 #define CHANNEL_HOP_PERIOD_MS 50
 #define SNIFFER_FILTER_MODE 6
+#define DEFAULT_BEACON_SOURCE_FLOOD 20
+#define DEFAULT_BEACON_OVERALL_FLOOD 30
 
 // Global configuration instance
 static AppConfig config;
@@ -74,9 +78,9 @@ AppConfig *get_config(void)
 ConfigItem config_items[] = {
     {"mqtt_qos", CONFIG_TYPE_INT, &config.mqtt_qos, "Nivel de QoS para los mensajes MQTT (0, 1 o 2)", .def.default_int = DEFAULT_MQTT_QOS},
     {"mqtt_retain", CONFIG_TYPE_INT, &config.mqtt_retain, "Indica si los mensajes MQTT deben enviarse con la marca retain", .def.default_int = DEFAULT_MQTT_RETAIN},
-    {"atk_beacon", CONFIG_TYPE_INT, &config.attack_type_beacon_flood, "Tipo de ataque utilizado en el análisis de inundación de beacons", .def.default_int = DEFAULT_ATTACK_TYPE_BEACON_FLOOD},
-    {"beacon_exp", CONFIG_TYPE_LONG, &config.beacon_expiration_time, "Tiempo de expiración de un beacon detectado para marcarlo como inactivo (milisegundos)", .def.default_long = DEFAULT_BEACON_EXPIRATION_TIME},
-    {"mass_deauth", CONFIG_TYPE_INT, &config.mass_deauth_threshold, "Umbral de desconexiones masivas para activar la detección de ataque deauth (número de eventos)", .def.default_int = DEFAULT_MASS_DEAUTH_THRESHOLD},
+    /*{"atk_beacon", CONFIG_TYPE_INT, &config.attack_type_beacon_flood, "Tipo de ataque utilizado en el análisis de inundación de beacons", .def.default_int = DEFAULT_ATTACK_TYPE_BEACON_FLOOD},*/
+    {"beacon_exp", CONFIG_TYPE_LONG, &config.beacon_expiration_time, "✅ Tiempo de expiración de un beacon detectado para marcarlo como inactivo (milisegundos)", .def.default_long = DEFAULT_BEACON_EXPIRATION_TIME},
+    {"mass_deauth", CONFIG_TYPE_INT, &config.mass_deauth_threshold, "✅ Umbral de desconexiones masivas para activar la detección de ataque deauth (número de eventos)", .def.default_int = DEFAULT_MASS_DEAUTH_THRESHOLD},
     {"ap_hist_to", CONFIG_TYPE_INT, &config.ap_history_timeout_ms, "Tiempo de expiración para entradas en el historial de APs (milisegundos)", .def.default_int = DEFAULT_AP_HISTORY_TIMEOUT_MS},
     {"ap_print_to", CONFIG_TYPE_INT, &config.ap_print_timeout_ms, "Intervalo para imprimir el historial de APs detectados (milisegundos)", .def.default_int = DEFAULT_AP_PRINT_TIMEOUT_MS},
     {"flag_delay", CONFIG_TYPE_INT, &config.flagging_start_delay_ms, "Retardo antes de empezar a marcar APs como sospechosos (milisegundos)", .def.default_int = DEFAULT_FLAGGING_START_DELAY_MS},
@@ -85,8 +89,8 @@ ConfigItem config_items[] = {
     {"evil_ssid", CONFIG_TYPE_INT, &config.evil_twin_ssid_threshold, "Número de SSIDs similares requeridos para sospechar de un Evil Twin", .def.default_int = DEFAULT_EVIL_TWIN_SSID_THRESHOLD},
     {"max_dev", CONFIG_TYPE_INT, &config.max_device_entries, "Número máximo de dispositivos a rastrear en la base de datos de direcciones MAC", .def.default_int = DEFAULT_MAX_DEVICE_ENTRIES},
     {"entry_ttl", CONFIG_TYPE_INT, &config.entry_ttl, "Tiempo de vida para una entrada de dispositivo en la tabla MAC (segundos)", .def.default_int = DEFAULT_ENTRY_TTL},
-    {"time_win", CONFIG_TYPE_INT, &config.time_window, "Ventana de tiempo para el análisis de frecuencia de tráfico (segundos)", .def.default_int = DEFAULT_TIME_WINDOW},
-    {"time_win_freq", CONFIG_TYPE_INT, &config.time_window_frequency, "Ventana de tiempo usada en análisis de frecuencia de tráfico (segundos)", .def.default_int = DEFAULT_TIME_WINDOW_FREQUENCY},
+    {"time_win", CONFIG_TYPE_INT, &config.time_window, "✅ Ventana de tiempo para el análisis de frecuencia de tráfico (segundos)", .def.default_int = DEFAULT_TIME_WINDOW},
+    /*{"time_win_freq", CONFIG_TYPE_INT, &config.time_window_frequency, "Ventana de tiempo usada en análisis de frecuencia de tráfico (segundos)", .def.default_int = DEFAULT_TIME_WINDOW_FREQUENCY},*/
     {"time_win_mac_ana", CONFIG_TYPE_INT, &config.time_window_mac_analysis, "Ventana de tiempo específica para análisis de direcciones MAC (segundos)", .def.default_int = DEFAULT_TIME_WINDOW_MAC_ANALYSIS},
     {"max_trk_src", CONFIG_TYPE_INT, &config.max_tracked_sources, "Número máximo de fuentes rastreadas en análisis de frecuencia", .def.default_int = DEFAULT_MAX_TRACKED_SOURCES},
     {"mac_hist_size", CONFIG_TYPE_INT, &config.mac_history_size, "Tamaño del historial de direcciones MAC almacenadas", .def.default_int = DEFAULT_MAC_HISTORY_SIZE},
@@ -95,16 +99,19 @@ ConfigItem config_items[] = {
     {"max_payload", CONFIG_TYPE_INT, &config.max_payload_len, "Longitud máxima del payload para su análisis en capa 7 (bytes)", .def.default_int = DEFAULT_MAX_PAYLOAD_LEN},
     {"min_print_seq", CONFIG_TYPE_INT, &config.min_printable_seq, "Longitud mínima de datos imprimibles para ser analizados (caracteres consecutivos)", .def.default_int = DEFAULT_MIN_PRINTABLE_SEQ},
     {"low_entropy", CONFIG_TYPE_FLOAT, &config.low_entropy_threshold, "Umbral de entropía baja para detectar patrones sospechosos en datos (0.0 - 1.0)", .def.default_float = DEFAULT_LOW_ENTROPY_THRESHOLD},
-    {"switch_intv", CONFIG_TYPE_INT, &config.switch_interval, "Intervalo de cambio entre canales WiFi (milisegundos)", .def.default_int = DEFAULT_SWITCH_INTERVAL},
-    {"chan_hop", CONFIG_TYPE_BOOL, &config.enable_channel_hopping, "Habilita el cambio automático de canal (booleano)", .def.default_bool = DEFAULT_ENABLE_CHANNEL_HOPPING},
-    {"def_chan", CONFIG_TYPE_INT, &config.deafult_channel, "Canal WiFi por defecto al iniciar la captura (1-13)", .def.default_int = DEFAULT_CHANNEL},
+    {"switch_intv", CONFIG_TYPE_INT, &config.switch_interval, "✅ Intervalo de cambio entre canales WiFi (milisegundos)", .def.default_int = DEFAULT_SWITCH_INTERVAL},
+    {"chan_hop", CONFIG_TYPE_BOOL, &config.enable_channel_hopping, "✅ Habilita el cambio automático de canal (booleano)", .def.default_bool = DEFAULT_ENABLE_CHANNEL_HOPPING},
+    {"def_chan", CONFIG_TYPE_INT, &config.deafult_channel, "✅ Canal WiFi por defecto al iniciar la captura (1-13)", .def.default_int = DEFAULT_CHANNEL},
     {"arp_req_timeout", CONFIG_TYPE_INT, &config.arp_request_timeout, "Tiempo máximo de espera para respuestas ARP (milisegundos)", .def.default_int = ARP_REQUEST_TIMEOUT},
     {"scan_cycle", CONFIG_TYPE_INT, &config.scan_cycle_delay, "Intervalo entre ciclos de escaneo de ARP (milisegundos)", .def.default_int = SCAN_CYCLE_DELAY},
-    {"batch_size", CONFIG_TYPE_INT, &config.batch_size, "Tamaño del lote para procesamiento de datos o envío por MQTT (número de elementos)", .def.default_int = BATCH_SIZE},
-    {"chan_hop_period", CONFIG_TYPE_INT, &config.hop_interval_ms, "Período de cambio de canal para el sniffer (milisegundos)", .def.default_int = CHANNEL_HOP_PERIOD_MS},
-    {"sniffer_filter_mode", CONFIG_TYPE_INT, &config.filter_mode, "Modo de filtro para el sniffer (0: todo, 1: solo gestión, 2: solo datos, 3: solo control)", .def.default_int = SNIFFER_FILTER_MODE},
-    {"deauth_time_window", CONFIG_TYPE_INT, &config.deauth_time_window, "Ventana de tiempo para detección de desconexiones (milisegundos)", .def.default_int = DEFAULT_TIME_WINDOW},
-    {"deauth_freq_threshold", CONFIG_TYPE_INT, &config.deauth_frequency_threshold, "Umbral de frecuencia para detección de desconexiones (número de eventos)", .def.default_int = DEFAULT_DEAUTH_FREQ_THRESHOLD}
+    {"batch_size", CONFIG_TYPE_INT, &config.batch_size, " Tamaño del lote para procesamiento de datos o envío por MQTT (número de elementos)", .def.default_int = BATCH_SIZE},
+    {"chan_hop_period", CONFIG_TYPE_INT, &config.hop_interval_ms, "✅ Período de cambio de canal para el sniffer (milisegundos)", .def.default_int = CHANNEL_HOP_PERIOD_MS},
+    {"sniffer_filter_mode", CONFIG_TYPE_INT, &config.filter_mode, "✅ Modo de filtro para el sniffer (0: todo, 1: solo gestión, 2: solo datos, 3: solo control)", .def.default_int = SNIFFER_FILTER_MODE},
+    {"deauth_time_window", CONFIG_TYPE_INT, &config.deauth_time_window, "✅ Ventana de tiempo para detección de desconexiones (milisegundos)", .def.default_int = DEFAULT_TIME_WINDOW},
+    {"deauth_freq_threshold", CONFIG_TYPE_INT, &config.deauth_frequency_threshold, "✅ Umbral de frecuencia para detección de desconexiones (número de eventos)", .def.default_int = DEFAULT_DEAUTH_FREQ_THRESHOLD},
+    {"beacon_source_threshold", CONFIG_TYPE_INT, &config.beacon_per_source_threshold, "✅ Umbral de frecuencia para deteccion de inundacion por fuente (numero de eventos)", .def.default_int = DEFAULT_BEACON_SOURCE_FLOOD},
+    {"deauth_global_threshold", CONFIG_TYPE_INT, &config.beacon_global_threshold, "✅ Umbral de frecuencia para deteccion de inundacion global (numero de eventos)", .def.default_int = DEFAULT_BEACON_OVERALL_FLOOD},
+    {"deauth_global_threshold", CONFIG_TYPE_BOOL, &config.enable_dedicated_mode, "✅ Habilitar o deshabilitar el modod dedicado de escuchal al detectar un evil twin", .def.default_int = DEFAULT_ENABLE_DEDICATED_MODE}
 
 };
 
@@ -283,6 +290,8 @@ void config_apply(void)
 {
     config_log_values();
     sniffer_update_config();
+    // update_evil_twin_config();
+    // main_update_config();
     // TODO: Call each module's update function (e.g., sniffer_update_settings(&config); mqtt_client_set_qos(config.mqtt_qos); etc.)
 }
 
@@ -320,7 +329,8 @@ void config_update_from_json(const char *json, int len)
                 switch (config_items[i].type)
                 {
                 case CONFIG_TYPE_INT:
-                    if (cJSON_IsNumber(value)){
+                    if (cJSON_IsNumber(value))
+                    {
                         *((int *)config_items[i].addr) = value->valueint;
                         ESP_LOGI(TAG, "Updated %s to %d", config_items[i].key, *((int *)config_items[i].addr));
                     }
@@ -330,7 +340,8 @@ void config_update_from_json(const char *json, int len)
                         *((long *)config_items[i].addr) = (long)value->valuedouble;
                     break;
                 case CONFIG_TYPE_BOOL:
-                    if (cJSON_IsBool(value)) {
+                    if (cJSON_IsBool(value))
+                    {
                         *((bool *)config_items[i].addr) = cJSON_IsTrue(value);
                         ESP_LOGI(TAG, "Updated %s to %d", config_items[i].key, *((bool *)config_items[i].addr));
                     }
@@ -351,4 +362,102 @@ void config_update_from_json(const char *json, int len)
 
     config_apply();
     config_save();
+}
+
+// ----------------------------------------------------------------
+// Whitelist que almacena SSID + MAC
+// ----------------------------------------------------------------
+
+WhitelistEntry whitelist[MAX_WHITELIST_ENTRIES];
+size_t whitelist_count = 0;
+
+void whitelist_init(void)
+{
+    whitelist_count = 0;
+    for (int i = 0; i < MAX_WHITELIST_ENTRIES; i++)
+    {
+        whitelist[i].mac[0] = '\0';
+        whitelist[i].ssid[0] = '\0';
+    }
+}
+
+/// Comprueba si la MAC ya está en la lista (ignorando mayúsculas/minúsculas)
+bool whitelist_contains_mac(const char *mac, const char *ssid)
+{
+    if (mac == NULL || ssid == NULL)
+        return false;
+    for (int i = 0; i < whitelist_count; i++)
+    {
+        if (strcasecmp(whitelist[i].mac, mac) == 0 && strcasecmp(whitelist[i].ssid, ssid) == 0)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Agrega un par (ssid, mac) si la MAC no existe todavía y hay espacio
+bool whitelist_add(const char *ssid, const char *mac)
+{
+    if (mac == NULL || ssid == NULL)
+        return false;
+    if (whitelist_contains_mac(mac, ssid))
+        return false;
+    if (whitelist_count >= MAX_WHITELIST_ENTRIES)
+        return false;
+
+    // Guardamos SSID tal cual (o podrías normalizar/cortar si supera SSID_STRING_LEN-1)
+    strncpy(whitelist[whitelist_count].ssid, ssid, SSID_STRING_LEN - 1);
+    whitelist[whitelist_count].ssid[SSID_STRING_LEN - 1] = '\0';
+
+    // Guardamos MAC en mayúsculas
+    for (int i = 0; i < MAC_STRING_LEN - 1 && mac[i] != '\0'; i++)
+    {
+        whitelist[whitelist_count].mac[i] = toupper((unsigned char)mac[i]);
+    }
+    whitelist[whitelist_count].mac[MAC_STRING_LEN - 1] = '\0';
+
+    whitelist_count++;
+    return true;
+}
+
+/// Elimina la entrada cuya MAC coincida (compacta el array)
+bool whitelist_remove_by_mac(const char *mac)
+{
+    if (mac == NULL)
+        return false;
+    for (int i = 0; i < whitelist_count; i++)
+    {
+        if (strcasecmp(whitelist[i].mac, mac) == 0)
+        {
+            // Reemplazamos con el último elemento
+            whitelist_count--;
+            if (i < whitelist_count)
+            {
+                memcpy(&whitelist[i], &whitelist[whitelist_count], sizeof(WhitelistEntry));
+            }
+            whitelist[whitelist_count].mac[0] = '\0';
+            whitelist[whitelist_count].ssid[0] = '\0';
+            return true;
+        }
+    }
+    return false;
+}
+
+void whitelist_clear(void)
+{
+    for (int i = 0; i < whitelist_count; i++)
+    {
+        whitelist[i].mac[0] = '\0';
+        whitelist[i].ssid[0] = '\0';
+    }
+    whitelist_count = 0;
+}
+
+/// Devuelve puntero al array y pone en *out_count el número de entradas válidas
+const WhitelistEntry *whitelist_get_list(int *out_count)
+{
+    if (out_count)
+        *out_count = whitelist_count;
+    return whitelist;
 }

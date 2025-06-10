@@ -1,121 +1,133 @@
 #include "frequency_analysis.h"
-
-#include "esp_log.h"
-#include <stdbool.h>
 #include <string.h>
-#include <stdio.h>
 
-static const char *TAG = "frequency_analysis";
-// loaded config values
-int time_window_frequency = 0;
-
-void initialize_frequency_analysis()
+static bool mac_equal(const uint8_t *a, const uint8_t *b)
 {
-    AppConfig *config = get_config();
-    time_window_frequency = config->time_window_frequency;
+    return memcmp(a, b, 6) == 0;
 }
 
-void init_frequency_analysis(attack_frequency_t *frequency_data)
+// Busca o crea. Si crea, inicializa el entry (incluye alerted=false).
+static frequency_entry_t *find_or_create_entry(frequency_tracker_t *t,
+                                               const uint8_t mac[6])
 {
-    AppConfig *config = get_config();
-    time_window_frequency = config->time_window_frequency;
-    memset(frequency_data, 0, sizeof(attack_frequency_t));
-}
-
-void update_attack_count(attack_frequency_t *frequency_data, uint32_t timestamp, attack_type_t attack_type)
-{
-    if (timestamp / time_window_frequency > frequency_data->last_timestamp / time_window_frequency)
+    // Buscamos
+    for (uint32_t i = 0; i < t->num_entries; ++i)
     {
-        ESP_LOGI(TAG, "Resetting attack counts (New Time Window) - Previous: %d, Current: %d",
-                 frequency_data->last_timestamp, timestamp);
-        memset(frequency_data->attack_counts, 0, sizeof(frequency_data->attack_counts));
+        if (mac_equal(t->entries[i].mac, mac))
+            return &t->entries[i];
     }
-
-    frequency_data->attack_counts[attack_type]++;
-    frequency_data->last_timestamp = timestamp;
-}
-
-bool detect_attack_frequency(attack_frequency_t *frequency_data, uint32_t timestamp, attack_type_t attack_type)
-{
-    if (frequency_data->attack_counts[attack_type] > ATTACK_THRESHOLDS[attack_type])
+    // Creamos
+    if (t->num_entries >= MAX_TRACKED_SOURCES)
     {
-        return true;
+        return NULL;
     }
-    return false;
+    frequency_entry_t *e = &t->entries[t->num_entries++];
+    memset(e, 0, sizeof(*e));
+    memcpy(e->mac, mac, 6);
+    e->alerted = false;
+    return e;
 }
 
-void clear_frequency_data(attack_frequency_t *frequency_data)
+// Elimina la entry i (moviendo la última a su lugar).
+static void remove_entry(frequency_tracker_t *t, uint32_t idx)
 {
-    memset(frequency_data, 0, sizeof(attack_frequency_t));
-}
-
-void init_frequency_tracker(frequency_tracker_t *tracker, uint32_t time_window_frequency, uint32_t attack_threshold)
-{
-    memset(tracker, 0, sizeof(frequency_tracker_t));
-    tracker->time_window = time_window_frequency;
-    tracker->attack_threshold = attack_threshold;
-}
-
-static frequency_entry_t *find_or_create_entry(frequency_tracker_t *tracker, uint32_t *source, uint32_t timestamp)
-{
-    for (int i = 0; i < tracker->count; i++)
+    if (idx + 1 < t->num_entries)
     {
-        if (tracker->entries[i].source == *source)
+        t->entries[idx] = t->entries[t->num_entries - 1];
+    }
+    --t->num_entries;
+}
+
+void init_frequency_tracker(frequency_tracker_t *t,
+                            uint32_t time_window_ms,
+                            uint32_t attack_threshold)
+{
+    memset(t, 0, sizeof(*t));
+    t->time_window = time_window_ms;
+    t->attack_threshold = attack_threshold;
+}
+
+void reconfigure_frequency_tracker(frequency_tracker_t *t,
+                                   uint32_t time_window_ms,
+                                   uint32_t attack_threshold)
+{
+    t->time_window = time_window_ms;
+    t->attack_threshold = attack_threshold;
+}
+
+uint32_t get_tracker_count(const frequency_tracker_t *t, const uint8_t key[6])
+{
+    for (uint32_t i = 0; i < t->num_entries; ++i)
+    {
+        if (memcmp(t->entries[i].mac, key, 6) == 0)
         {
-            return &tracker->entries[i];
+            return t->entries[i].count;
         }
     }
-
-    // Add new source if space available
-    /*if (tracker->count < MAX_TRACKED_SOURCES)
-    {
-        frequency_entry_t *new_entry = &tracker->entries[tracker->count++];
-        memcpy(new_entry->source, source, sizeof(new_entry->source));
-        new_entry->attack_count = 0;
-        new_entry->last_timestamp = timestamp;
-        ESP_LOGI(TAG, "Tracking new source: %02X:%02X:%02X:%02X:%02X:%02X",
-                 source[0], source[1], source[2], source[3], source[4], source[5]);
-        return new_entry;
-    }*/
-
-    ESP_LOGW(TAG, "Maximum sources tracked, unable to add new entry.");
-    return NULL; 
+    return 0;
 }
 
-void update_frequency(frequency_tracker_t *tracker, uint32_t *source, uint32_t timestamp)
+void update_frequency(frequency_tracker_t *t,
+                      const uint8_t source_mac[6],
+                      uint32_t now)
 {
-    frequency_entry_t *entry = find_or_create_entry(tracker, source, timestamp);
-    if (!entry)
+    frequency_entry_t *e = find_or_create_entry(t, source_mac);
+    if (!e)
         return;
 
-    if (timestamp / tracker->time_window > entry->last_timestamp / tracker->time_window)
-    {
-        ESP_LOGI(TAG, "Resetting attack count for source %02X:%02X:%02X:%02X:%02X:%02X",
-                 source[0], source[1], source[2], source[3], source[4], source[5]);
-        entry->attack_count = 0;
-        entry->last_timestamp = timestamp;
-    }
+    if (e->count < MAX_EVENTS_PER_SOURCE)
+        e->timestamps[e->count++] = now;
 
-    entry->attack_count++;
+    uint32_t j = 0;
+    for (uint32_t i = 0; i < e->count; ++i)
+    {
+        if (now - e->timestamps[i] <= t->time_window)
+        {
+            e->timestamps[j++] = e->timestamps[i];
+        }
+    }
+    e->count = j;
+
+    uint8_t global_key[6] = GLOBAL_KEY;
+    if (memcmp(e->mac, global_key, 6) != 0 && e->count == 0)
+    {
+        uint32_t idx = e - &t->entries[0];
+        remove_entry(t, idx);
+    }
 }
 
-bool detect_high_frequency(frequency_tracker_t *tracker, uint32_t *source, uint32_t timestamp)
+bool detect_high_frequency(frequency_tracker_t *t,
+                           const uint8_t source_mac[6],
+                           uint32_t now)
 {
-    frequency_entry_t *entry = find_or_create_entry(tracker, source, timestamp);
-    if (!entry)
+    update_frequency(t, source_mac, now);
+    frequency_entry_t *e = find_or_create_entry(t, source_mac);
+    if (!e)
+        return false;
+    return (e->count >= t->attack_threshold);
+}
+
+bool detect_high_frequency_once(frequency_tracker_t *t,
+                                const uint8_t source_mac[6],
+                                uint32_t now)
+{
+    update_frequency(t, source_mac, now);
+    frequency_entry_t *e = find_or_create_entry(t, source_mac);
+    if (!e)
         return false;
 
-    if (entry->attack_count > tracker->attack_threshold)
+    if (e->count >= t->attack_threshold)
     {
-        ESP_LOGW(TAG, "Attack detected from %02X:%02X:%02X:%02X:%02X:%02X - Count: %d, Threshold: %d",
-                 source[0], source[1], source[2], source[3], source[4], source[5],
-                 entry->attack_count, tracker->attack_threshold);
-        return true;
+        if (!e->alerted)
+        {
+            e->alerted = true;
+            return true;
+        }
+        return false;
     }
-    return false;
-}
-
-void clear_frequency_tracker(frequency_tracker_t *tracker)
-{
-    memset(tracker, 0, sizeof(frequency_tracker_t));
+    else
+    {
+        e->alerted = false;
+        return false;
+    }
 }

@@ -11,11 +11,11 @@
 #include "../tools/centralized_config.h"
 #include "../sniffer_module.h"
 
-typedef struct {
-    char ssid[33];    
-    uint8_t bssid[6];
-    frequency_tracker_t frequency_tracker;
-} beacon_stats_t;
+// typedef struct {
+//     char ssid[33];    
+//     uint8_t bssid[6];
+//     frequency_tracker_t frequency_tracker;
+// } beacon_stats_t;
 
 void detect_beacon_flood(wifi_packet_t *pkt);
 

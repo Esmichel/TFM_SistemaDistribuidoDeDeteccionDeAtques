@@ -7,52 +7,28 @@
 // #define TIME_WINDOW  5000 
 // #define ATTACK_TYPE_COUNT  5 
 // #define MAX_TRACKED_SOURCES 50
-
-typedef enum {
-    ATTACK_TYPE_DEAUTH,
-    ATTACK_TYPE_MAC_SPOOFING,
-    ATTACK_TYPE_BROADCAST,
-    ATTACK_TYPE_MASS_DEAUTH,
-    ATTACK_TYPE_BEACON_FLOOD
-} attack_type_t;
-
-static const uint32_t ATTACK_THRESHOLDS[ATTACK_TYPE_COUNT] = {
-    10,  
-    8,  
-    15,
-    30,
-    100
-};
-
-typedef struct {
-    uint32_t attack_counts[ATTACK_TYPE_COUNT];
-    uint32_t last_timestamp;
-} attack_frequency_t;
-
-
-
-typedef struct {
-    uint32_t source;
-    uint32_t attack_count;
-    uint32_t last_timestamp;
+#define MAX_EVENTS_PER_SOURCE 60
+typedef struct
+{
+    uint8_t mac[6];
+    uint32_t timestamps[MAX_EVENTS_PER_SOURCE];
+    uint32_t count; // nº de timestamps válidos en ventana
+    bool alerted;   // si ya hemos alertado para esta entry
 } frequency_entry_t;
 
-typedef struct {
+typedef struct
+{
     frequency_entry_t entries[MAX_TRACKED_SOURCES];
-    int count;
-    uint32_t time_window;
-    uint32_t attack_threshold;
+    uint32_t num_entries;
+    uint32_t time_window;      // ms
+    uint32_t attack_threshold; // nº eventos para alerta
 } frequency_tracker_t;
 
-
-void init_frequency_analysis(attack_frequency_t *frequency_data);
-void update_attack_count(attack_frequency_t *frequency_data, uint32_t timestamp, attack_type_t attack_type);
-bool detect_attack_frequency(attack_frequency_t *frequency_data, uint32_t timestamp, attack_type_t attack_type);
-void clear_frequency_data(attack_frequency_t *frequency_data);
-void init_frequency_tracker(frequency_tracker_t *tracker, uint32_t time_window, uint32_t attack_threshold);
-void update_frequency(frequency_tracker_t *tracker, uint32_t *source, uint32_t timestamp);
-void clear_frequency_tracker(frequency_tracker_t *tracker);
-bool detect_high_frequency(frequency_tracker_t *tracker, uint32_t *source, uint32_t timestamp);
-void initialize_frequency_analysis();
+void init_frequency_tracker(frequency_tracker_t *tracker, uint32_t time_window_ms, uint32_t attack_threshold);
+void reconfigure_frequency_tracker(frequency_tracker_t *tracker, uint32_t time_window_ms, uint32_t attack_threshold);
+void update_frequency(frequency_tracker_t *tracker, const uint8_t source_mac[6], uint32_t current_time_ms);
+bool detect_high_frequency_once(frequency_tracker_t *tracker, const uint8_t source_mac[6], uint32_t current_time_ms);
+bool detect_high_frequency(frequency_tracker_t *tracker, const uint8_t source_mac[6], uint32_t current_time_ms);
+uint32_t get_tracker_count(const frequency_tracker_t *t, const uint8_t key[6]);
 
 #endif

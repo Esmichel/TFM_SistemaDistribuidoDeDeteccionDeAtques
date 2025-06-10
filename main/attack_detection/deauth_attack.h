@@ -16,6 +16,7 @@
 #include "../detection_methods/mac_analysis.h"
 #include "../detection_methods/frequency_analysis.h"
 #include "../tools/hash_function.h"
+#include "../../components/mqtt_communication/network_status.h"
 #include "../tools/centralized_config.h"
 
 //#define DEAUTH_PACKET 0x0C

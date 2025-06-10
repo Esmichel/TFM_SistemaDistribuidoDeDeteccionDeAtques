@@ -28,7 +28,7 @@ typedef struct {
 
 void process_l3_packet(const uint8_t *payload, uint16_t length) {
     if (length < 24 + 8) {
-        ESP_LOGW(TAG, "Paquete demasiado corto para contener encabezados necesarios");
+        ESP_LOGI(TAG, "Paquete demasiado corto para contener encabezados necesarios");
         return;
     }
 
@@ -40,7 +40,7 @@ void process_l3_packet(const uint8_t *payload, uint16_t length) {
     }
 
     if (payload[offset] != 0xAA || payload[offset + 1] != 0xAA || payload[offset + 2] != 0x03) {
-        ESP_LOGW(TAG, "Encabezado SNAP no encontrado");
+        ESP_LOGI(TAG, "Encabezado SNAP no encontrado");
         return;
     }
 
@@ -52,7 +52,7 @@ void process_l3_packet(const uint8_t *payload, uint16_t length) {
 
     const uint8_t *ip_header_start = payload + offset + 8;
     if (length < (ip_header_start - payload) + sizeof(ip_header_t)) {
-        ESP_LOGW(TAG, "Paquete demasiado corto para contener encabezado IP completo");
+        ESP_LOGI(TAG, "Paquete demasiado corto para contener encabezado IP completo");
         return;
     }
     ip_header_t *ip_hdr = (ip_header_t *)ip_header_start;

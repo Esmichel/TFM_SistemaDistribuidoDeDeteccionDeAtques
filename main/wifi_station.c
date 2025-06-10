@@ -19,6 +19,9 @@ SemaphoreHandle_t wifi_semaphore;
 SemaphoreHandle_t wifi_mode_mutex;
 static esp_timer_handle_t spoofing_timer;
 
+static esp_event_handler_instance_t wifi_evt_instance = NULL;
+static esp_event_handler_instance_t ip_evt_instance = NULL;
+
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
@@ -47,51 +50,81 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
 
 void switch_wifi_mode(bool enable_sniffer)
 {
-    if (xSemaphoreTake(wifi_mode_mutex, pdMS_TO_TICKS(1000)))
+    // Take the mutex (with timeout)
+    if (xSemaphoreTake(wifi_mode_mutex, pdMS_TO_TICKS(1000)) == pdFALSE)
     {
-        if (enable_sniffer == is_sniffer_mode)
-        {
-            ESP_LOGW(TAG, "Already in the requested mode, no changes made.");
-            return;
-        }
+        ESP_LOGW(TAG, "Timeout waiting for Wi-Fi mode mutex");
+        return;
+    }
 
-        if (enable_sniffer)
-        {
-            ESP_LOGI(TAG, "Switching to Sniffer Mode...");
-
-            esp_wifi_disconnect();
-            esp_event_handler_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler);
-            esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler);
-            esp_wifi_set_promiscuous(true);
-            ESP_LOGI(TAG, "Promiscuous mode enabled.");
-
-            is_sniffer_mode = true;
-        }
-        else
-        {
-            ESP_LOGI(TAG, "Switching to Station Mode...");
-
-            esp_wifi_set_promiscuous(false);
-            esp_wifi_set_mode(WIFI_MODE_STA);
-            esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL);
-            esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL);
-            wifi_config_t wifi_config = {
-                .sta = {
-                    .ssid = WIFI_SSID,
-                    .password = WIFI_PASSWORD,
-                },
-            };
-            esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
-            esp_wifi_start();
-            esp_wifi_connect();
-            is_sniffer_mode = false;
-        }
+    // If already in the requested mode, release and exit
+    if (enable_sniffer == is_sniffer_mode)
+    {
+        ESP_LOGW(TAG, "Already in the requested mode, no changes made.");
         xSemaphoreGive(wifi_mode_mutex);
+        return;
+    }
+
+    if (enable_sniffer)
+    {
+        // --- Switch to Sniffer Mode ---
+        ESP_LOGI(TAG, "Switching to Sniffer Mode…");
+        
+
+        // Tear down Station-related bits
+        esp_wifi_disconnect();
+        if (wifi_evt_instance != NULL)
+        {
+            ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, wifi_evt_instance));
+            wifi_evt_instance = NULL;
+        }
+
+        if (ip_evt_instance != NULL)
+        {
+            ESP_ERROR_CHECK(esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, ip_evt_instance));
+            ip_evt_instance = NULL;
+        }
+
+        // Stop Wi-Fi driver, set NULL mode, restart, then promisc
+        ESP_ERROR_CHECK(esp_wifi_stop());
+        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_NULL));
+        ESP_ERROR_CHECK(esp_wifi_start());
+        ESP_ERROR_CHECK(esp_wifi_set_promiscuous(true));
+
+        ESP_LOGI(TAG, "Promiscuous mode enabled.");
+        is_sniffer_mode = true;
     }
     else
     {
-        ESP_LOGW(TAG, "Timeout while waiting for Wi-Fi mode mutex.");
+        // --- Switch to Station Mode ---
+        ESP_LOGI(TAG, "Switching to Station Mode…");
+
+        // Disable promiscuous, reconfigure station
+        ESP_ERROR_CHECK(esp_wifi_set_promiscuous(false));
+        ESP_ERROR_CHECK(esp_wifi_stop());
+        vTaskDelay(pdMS_TO_TICKS(10));
+        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+        // Apply your SSID/password and connect
+        wifi_config_t wifi_config = {
+            .sta = {
+                .ssid = WIFI_SSID,
+                .password = WIFI_PASSWORD,
+            },
+        };
+        ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+        ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, wifi_event_handler, NULL, &wifi_evt_instance));
+        ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, wifi_event_handler, NULL, &ip_evt_instance));
+        ESP_ERROR_CHECK(esp_wifi_start());
+        // Re-register event handlers
+
+        // ESP_ERROR_CHECK(esp_wifi_connect());
+
+        ESP_LOGI(TAG, "Station mode enabled, attempting connect.");
+        is_sniffer_mode = false;
     }
+
+    // Release the mutex
+    xSemaphoreGive(wifi_mode_mutex);
 }
 
 void wifi_init_sta(bool connect_to_ap)
@@ -179,7 +212,7 @@ void start_dedicated_listening_mode(const wifi_packet_t *evil_pkt)
             .name = "spoofing_timeout"};
         esp_timer_create(&timer_args, &spoofing_timer);
     }
-    esp_timer_start_once(spoofing_timer, 120000 * 1000ULL);
+    esp_timer_start_once(spoofing_timer, DEDICATED_MODE_TIMEOUT * 1000ULL);
 
     current_wifi_state = STATE_DEDICATED_LISTENING;
     xSemaphoreGive(wifi_mode_mutex);
@@ -209,9 +242,9 @@ void revert_to_normal_mode(void *arg)
 
         esp_wifi_disconnect();
         esp_wifi_stop();
-        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
-        ESP_ERROR_CHECK(esp_wifi_set_mac(ESP_IF_WIFI_AP, ap_mac));
-        ESP_ERROR_CHECK(esp_wifi_set_mac(ESP_IF_WIFI_STA, factory_mac));
+        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_NULL));
+        // ESP_ERROR_CHECK(esp_wifi_set_mac(ESP_IF_WIFI_AP, ap_mac));
+        // ESP_ERROR_CHECK(esp_wifi_set_mac(ESP_IF_WIFI_STA, factory_mac));
         // Restaura el estado global
         current_wifi_state = STATE_NORMAL_ROTATION;
         ESP_LOGI(TAG, "Normal mode restored.");
